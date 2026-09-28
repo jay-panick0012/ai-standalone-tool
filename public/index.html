@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Pipeline &amp; Environment Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0D1420; --surface: #141D2B; --surface-2: #1B2634;
+    --border: #263449; --border-soft: #1E2A3A;
+    --text: #E7EDF4; --muted: #8B98A8; --muted-2: #5E6B7C;
+    --accent: #2DD4BF; --accent-dim: #1B4A45;
+    --warn: #F5A524; --danger: #F76A6A; --good: #4ADE80;
+    --radius: 10px;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #F5F7FA; --surface: #FFFFFF; --surface-2: #EEF1F5;
+      --border: #D8DEE6; --border-soft: #E4E8ED; --text: #101826;
+      --muted: #5B6675; --muted-2: #8C95A3; --accent-dim: #D6F5F1;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; line-height: 1.5; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 34px 28px 70px; }
+  @media (max-width: 640px) { .wrap { padding: 20px 16px 50px; } }
+
+  .head { margin-bottom: 22px; }
+  .head .eyebrow { font-family: var(--mono); font-size: 11.5px; color: var(--accent); margin-bottom: 8px; }
+  .head h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .head p { color: var(--muted); font-size: 14px; margin: 0; max-width: 680px; }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px; }
+  .panel h3 { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+
+  .proj-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .proj-chip {
+    border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
+    border-radius: 999px; padding: 8px 14px; font-size: 13px; cursor: pointer; display: flex; gap: 8px; align-items: center;
+  }
+  .proj-chip .tag { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--border-soft); color: var(--muted-2); }
+  .proj-chip.active { border-color: var(--accent); color: var(--text); background: var(--accent-dim); font-weight: 600; }
+  .proj-chip.active .tag { color: var(--accent); }
+
+  .mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .mode-btn {
+    flex: 1; text-align: center; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--muted); font-size: 13px; cursor: pointer; font-weight: 600;
+  }
+  .mode-btn.active { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+
+  textarea {
+    width: 100%; min-height: 92px; background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-family: var(--sans); font-size: 14px; padding: 12px 14px; resize: vertical;
+  }
+  textarea.code-input { font-family: var(--mono); font-size: 12.5px; min-height: 140px; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+
+  .field-label { font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+  .field-hint { font-size: 11.5px; color: var(--muted-2); margin: 4px 0 0; }
+
+  .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .example-chip {
+    border: 1px dashed var(--border); background: transparent; color: var(--muted);
+    border-radius: 7px; padding: 6px 11px; font-size: 12px; cursor: pointer;
+  }
+  .example-chip:hover { color: var(--text); border-color: var(--muted); }
+
+  .panel-foot { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; gap: 10px; flex-wrap: wrap; }
+  .hint { font-size: 12px; color: var(--muted-2); }
+
+  button.primary {
+    background: var(--accent); color: #06201C; border: none; border-radius: 8px;
+    padding: 10px 20px; font-weight: 700; font-size: 13.5px; cursor: pointer;
+  }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  button.primary:not(:disabled):hover { filter: brightness(1.08); }
+
+  .status-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); }
+  .dot.pulse { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  .error-box {
+    background: rgba(247,106,106,0.12); border: 1px solid var(--danger); color: var(--text);
+    border-radius: 8px; padding: 12px 14px; font-size: 13px; margin-top: 12px; display: none;
+  }
+  .error-box.show { display: block; }
+
+  #results { display: none; }
+  #results.show { display: block; }
+
+  .impact-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .impact-card {
+    flex: 1; min-width: 200px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px;
+  }
+  .impact-card .k { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
+  .impact-card .v { font-size: 15px; font-weight: 600; color: var(--accent); }
+
+  .explain-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; margin-bottom: 18px; font-size: 14px;
+  }
+  .issues-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; margin-bottom: 18px;
+  }
+  .issues-box h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
+  .issues-box ul { margin: 0; padding-left: 20px; font-size: 13.5px; }
+  .issues-box li { margin-bottom: 6px; color: #F0A5A5; }
+
+  .code-tabs { display: flex; gap: 6px; margin-bottom: -1px; }
+  .code-tab {
+    background: var(--surface-2); border: 1px solid var(--border); border-bottom: none;
+    border-radius: 8px 8px 0 0; padding: 9px 16px; font-size: 12.5px; color: var(--muted);
+    cursor: pointer; font-family: var(--mono);
+  }
+  .code-tab.active { background: var(--surface); color: var(--accent); border-color: var(--accent); }
+
+  .code-panel {
+    display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 0 10px 10px 10px;
+    overflow: hidden;
+  }
+  .code-panel.active { display: block; }
+  .code-panel-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 16px; border-bottom: 1px solid var(--border-soft);
+  }
+  .code-panel-head .fname { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .copy-btn {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 6px; padding: 5px 11px; font-size: 11.5px; cursor: pointer;
+  }
+  .copy-btn:hover { color: var(--text); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--good); border-color: var(--good); }
+  pre.code-block {
+    margin: 0; padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px;
+    line-height: 1.6; color: var(--text); max-height: 520px; overflow-y: auto;
+  }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state .big { font-size: 15px; margin-bottom: 6px; color: var(--text); font-weight: 600; }
+
+  .footnote { font-size: 11.5px; color: var(--muted-2); margin-top: 30px; text-align: center; }
+
+  .env-checks { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+  .env-check {
+    display: flex; align-items: center; gap: 7px; border: 1px solid var(--border); background: var(--surface-2);
+    border-radius: 7px; padding: 7px 12px; font-size: 13px; cursor: pointer; color: var(--muted);
+  }
+  .env-check.checked { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
+  .env-check input { accent-color: var(--accent); }
+
+  .manifest-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 20px; margin-bottom: 18px;
+  }
+  .manifest-box h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 12px; }
+  .manifest-row {
+    display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px;
+  }
+  .manifest-row:last-child { border-bottom: none; }
+  .manifest-row .path { font-family: var(--mono); color: var(--accent); width: 320px; flex-shrink: 0; word-break: break-all; }
+  .manifest-row .purpose { color: var(--muted); }
+
+  .download-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+  button.download-btn {
+    background: var(--accent); color: #06201C; border: none; border-radius: 8px;
+    padding: 11px 20px; font-weight: 700; font-size: 13.5px; cursor: pointer;
+  }
+  button.download-btn:hover { filter: brightness(1.08); }
+  button.push-git-btn {
+    background: var(--surface-2); color: var(--muted-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 11px 20px; font-weight: 600; font-size: 13.5px; cursor: not-allowed; display: flex; align-items: center; gap: 8px;
+  }
+  .soon-tag { font-family: var(--mono); font-size: 9.5px; background: var(--border); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="eyebrow">devops.ai &middot; generator &middot; standalone</div>
+    <h1>AI Pipeline &amp; Environment Generator</h1>
+    <p>Paste an existing pipeline or IaC file to get a gap review and an improved version, or describe a new environment/pipeline from scratch. Runs entirely from this server — nothing is sent anywhere except the AI API call.</p>
+  </div>
+
+  <div class="panel">
+    <h3>Project / cloud context</h3>
+    <div class="proj-row" id="projRow"></div>
+
+    <h3 style="margin-top:6px;">Mode</h3>
+    <div class="mode-toggle">
+      <div class="mode-btn" data-mode="new" id="modeNewBtn">Generate from scratch</div>
+      <div class="mode-btn" data-mode="existing" id="modeExistingBtn">Review &amp; improve existing code</div>
+      <div class="mode-btn active" data-mode="solution" id="modeSolutionBtn">Full solution bundle</div>
+    </div>
+
+    <div id="newModeFields" style="display:none;">
+      <div class="field-label">Describe what you need</div>
+      <textarea id="promptInput" placeholder="e.g. New client onboarding: dev, qa, staging and prod environments with AKS, Azure SQL and Key Vault, plus a 4-stage deployment pipeline"></textarea>
+      <div class="examples" id="examplesRow"></div>
+    </div>
+
+    <div id="existingModeFields" style="display:none;">
+      <div class="field-label">Existing IaC (optional) &mdash; redact account IDs, hostnames, and any secret values first</div>
+      <textarea class="code-input" id="existingIacInput" placeholder="Paste an existing Terraform/Bicep/CloudFormation snippet here..."></textarea>
+      <div class="field-label">Existing pipeline (optional)</div>
+      <textarea class="code-input" id="existingPipelineInput" placeholder="Paste an existing pipeline YAML here..."></textarea>
+      <div class="field-label">What should improve? (optional context)</div>
+      <textarea id="existingContextInput" placeholder="e.g. This is slow to deploy and has no security scanning gate"></textarea>
+      <p class="field-hint">Never paste real credentials, API keys, or connection strings &mdash; use placeholders even in a test run.</p>
+    </div>
+
+    <div id="solutionModeFields">
+      <div class="field-label">Describe the end-to-end solution you need</div>
+      <textarea id="solutionPromptInput" placeholder="e.g. Full onboarding setup for a new client: all environments with AKS, Azure SQL MI, Key Vault and tenant Blob storage, plus the complete promotion pipeline with security gates"></textarea>
+      <div class="field-label">Environments to include</div>
+      <div class="env-checks" id="envChecks"></div>
+      <div class="examples" id="solutionExamplesRow"></div>
+      <p class="field-hint">This produces a full file set (IaC per environment, complete pipeline, README) &mdash; takes longer than the other two modes, typically 2&ndash;5 minutes.</p>
+    </div>
+
+    <div class="panel-foot">
+      <div class="hint">Generated output is a starting point &mdash; review before applying.</div>
+      <div style="display:flex; gap:10px; align-items:center;">
+        <div class="status-row" id="statusRow" style="display:none;">
+          <span class="dot pulse"></span><span id="statusText">Generating&hellip;</span>
+        </div>
+        <button class="primary" id="genBtn">Generate</button>
+      </div>
+    </div>
+    <div class="error-box" id="errorBox"></div>
+  </div>
+
+  <div id="results">
+    <div class="impact-row" id="impactRow"></div>
+    <div class="explain-box" id="explainBox"></div>
+    <div class="issues-box" id="issuesBox" style="display:none;">
+      <h4>Issues found in the existing code</h4>
+      <ul id="issuesList"></ul>
+    </div>
+
+    <div class="code-tabs" id="codeTabs"></div>
+    <div id="codePanels"></div>
+  </div>
+
+  <div class="empty-state" id="emptyState">
+    <div class="big">No output yet</div>
+    <div>Pick a project and mode, fill in the fields, and click Generate.</div>
+  </div>
+
+  <p class="footnote">Standalone deployment &middot; calls the Anthropic API directly via this server &middot; no claude.ai dependency</p>
+</div>
+
+<script>
+const PROJECTS = [
+  { id: "stellantis", name: "Stellantis (F2MC)", cloud: "AWS", iacTool: "CloudFormation", pipelineTool: "Azure DevOps YAML" },
+  { id: "tvh", name: "True Value Hub", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
+  { id: "hd-dms", name: "Harley Davidson DMS", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
+];
+
+const EXAMPLES = {
+  stellantis: [
+    "New ECS service with an RDS Postgres database and an ALB listener rule, tagged and using the existing VPC",
+    "A four-environment (Dev/QC/UAT/Prod) CloudFormation template set for an S3 + CloudFront static site",
+  ],
+  tvh: [
+    "Onboard a new client: dev, qa, staging and prod environments with AKS namespace, Azure SQL MI database and a tenant Blob container",
+    "A 4-stage build-once-promote pipeline for a .NET 6 API deploying the same artifact through Dev to Prod",
+  ],
+  "hd-dms": [
+    "An App Service, SQL database and Key Vault for a new dealer-facing module, with secrets pulled from Key Vault via managed identity",
+    "A release pipeline with pre-release readiness checks, Trivy + Snyk scanning gates, and an automated rollback stage",
+  ],
+};
+
+let activeId = "stellantis";
+let activeMode = "solution";
+const ENVS = ["dev", "qa", "staging", "prod"];
+let checkedEnvs = new Set(ENVS);
+
+const SOLUTION_EXAMPLES = {
+  stellantis: [
+    "Full Dev/QC/UAT/Prod CloudFormation setup for an ECS service with RDS",
+  ],
+  tvh: [
+    "Complete new-client onboarding: dev/qa/staging/prod with AKS namespace, Azure SQL MI, Key Vault and tenant Blob storage, plus the full 4-stage pipeline",
+  ],
+  "hd-dms": [
+    "Full environment set for a new dealer-facing module: App Service, SQL, Key Vault, plus a release pipeline with readiness checks and rollback",
+  ],
+};
+
+function escapeHtml(str) {
+  const d = document.createElement("div");
+  d.textContent = str == null ? "" : String(str);
+  return d.innerHTML;
+}
+
+function renderProjRow() {
+  const el = document.getElementById("projRow");
+  el.innerHTML = "";
+  PROJECTS.forEach(p => {
+    const chip = document.createElement("div");
+    chip.className = "proj-chip" + (p.id === activeId ? " active" : "");
+    chip.innerHTML = `${escapeHtml(p.name)} <span class="tag">${escapeHtml(p.cloud)}</span>`;
+    chip.onclick = () => { activeId = p.id; renderProjRow(); renderExamples(); renderSolutionExamples(); };
+    el.appendChild(chip);
+  });
+}
+
+function renderExamples() {
+  const el = document.getElementById("examplesRow");
+  el.innerHTML = "";
+  (EXAMPLES[activeId] || []).forEach(ex => {
+    const chip = document.createElement("div");
+    chip.className = "example-chip";
+    chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
+    chip.title = ex;
+    chip.onclick = () => { document.getElementById("promptInput").value = ex; };
+    el.appendChild(chip);
+  });
+}
+
+function setMode(mode) {
+  activeMode = mode;
+  document.getElementById("modeNewBtn").classList.toggle("active", mode === "new");
+  document.getElementById("modeExistingBtn").classList.toggle("active", mode === "existing");
+  document.getElementById("modeSolutionBtn").classList.toggle("active", mode === "solution");
+  document.getElementById("newModeFields").style.display = mode === "new" ? "block" : "none";
+  document.getElementById("existingModeFields").style.display = mode === "existing" ? "block" : "none";
+  document.getElementById("solutionModeFields").style.display = mode === "solution" ? "block" : "none";
+}
+
+function renderEnvChecks() {
+  const el = document.getElementById("envChecks");
+  el.innerHTML = "";
+  ENVS.forEach(env => {
+    const label = document.createElement("label");
+    label.className = "env-check" + (checkedEnvs.has(env) ? " checked" : "");
+    label.innerHTML = `<input type="checkbox" ${checkedEnvs.has(env) ? "checked" : ""}> ${env}`;
+    label.querySelector("input").addEventListener("change", (e) => {
+      if (e.target.checked) checkedEnvs.add(env); else checkedEnvs.delete(env);
+      renderEnvChecks();
+    });
+    el.appendChild(label);
+  });
+}
+
+function renderSolutionExamples() {
+  const el = document.getElementById("solutionExamplesRow");
+  el.innerHTML = "";
+  (SOLUTION_EXAMPLES[activeId] || []).forEach(ex => {
+    const chip = document.createElement("div");
+    chip.className = "example-chip";
+    chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
+    chip.title = ex;
+    chip.onclick = () => { document.getElementById("solutionPromptInput").value = ex; };
+    el.appendChild(chip);
+  });
+}
+
+function hideError() { const e = document.getElementById("errorBox"); e.classList.remove("show"); e.textContent = ""; }
+function showError(msg) { const e = document.getElementById("errorBox"); e.textContent = msg; e.classList.add("show"); }
+function showResults() { document.getElementById("results").classList.add("show"); document.getElementById("emptyState").style.display = "none"; }
+
+function renderResult(result, proj) {
+  document.getElementById("impactRow").innerHTML = `
+    <div class="impact-card">
+      <div class="k">Manual effort today</div>
+      <div class="v">${escapeHtml(result.manual_effort_today || "\u2013")}</div>
+    </div>
+    <div class="impact-card">
+      <div class="k">With AI generation</div>
+      <div class="v">${escapeHtml(result.with_ai_estimate || "\u2013")}</div>
+    </div>
+    <div class="impact-card">
+      <div class="k">Target stack</div>
+      <div class="v">${escapeHtml(proj.iacTool)} + ${escapeHtml(proj.pipelineTool)}</div>
+    </div>
+  `;
+
+  document.getElementById("explainBox").textContent = result.explanation || "";
+
+  const issuesBox = document.getElementById("issuesBox");
+  const issuesList = document.getElementById("issuesList");
+  if (result.existing_code_issues && result.existing_code_issues.length) {
+    issuesList.innerHTML = result.existing_code_issues.map(i => `<li>${escapeHtml(i)}</li>`).join("");
+    issuesBox.style.display = "block";
+  } else {
+    issuesBox.style.display = "none";
+  }
+
+  const tabsEl = document.getElementById("codeTabs");
+  const panelsEl = document.getElementById("codePanels");
+  tabsEl.innerHTML = "";
+  panelsEl.innerHTML = "";
+
+  const files = [
+    { label: proj.iacTool, filename: result.iac_filename || "main.tf", code: result.iac_code || "" },
+    { label: proj.pipelineTool, filename: result.pipeline_filename || "azure-pipelines.yml", code: result.pipeline_code || "" },
+  ];
+
+  files.forEach((f, idx) => {
+    const tab = document.createElement("div");
+    tab.className = "code-tab" + (idx === 0 ? " active" : "");
+    tab.textContent = f.label;
+    tab.onclick = () => {
+      document.querySelectorAll(".code-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".code-panel").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("panel-" + idx).classList.add("active");
+    };
+    tabsEl.appendChild(tab);
+
+    const panel = document.createElement("div");
+    panel.className = "code-panel" + (idx === 0 ? " active" : "");
+    panel.id = "panel-" + idx;
+    panel.innerHTML = `
+      <div class="code-panel-head">
+        <span class="fname">${escapeHtml(f.filename)}</span>
+        <button class="copy-btn" data-idx="${idx}">Copy</button>
+      </div>
+      <pre class="code-block">${escapeHtml(f.code)}</pre>
+    `;
+    panelsEl.appendChild(panel);
+  });
+
+  panelsEl.querySelectorAll(".copy-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const idx = Number(btn.dataset.idx);
+      try {
+        await navigator.clipboard.writeText(files[idx].code);
+        btn.textContent = "Copied";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1500);
+      } catch (e) {}
+    };
+  });
+}
+
+async function downloadZip(result, proj) {
+  const zip = new JSZip();
+  (result.files || []).forEach(f => zip.file(f.path, f.content || ""));
+  if (result.readme) zip.file("README.md", result.readme);
+  const blob = await zip.generateAsync({ type: "blob" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${activeId}-solution-bundle.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function renderSolutionResult(result, proj) {
+  document.getElementById("impactRow").innerHTML = `
+    <div class="impact-card">
+      <div class="k">Manual effort today</div>
+      <div class="v">${escapeHtml(result.manual_effort_today || "\u2013")}</div>
+    </div>
+    <div class="impact-card">
+      <div class="k">With AI generation</div>
+      <div class="v">${escapeHtml(result.with_ai_estimate || "\u2013")}</div>
+    </div>
+    <div class="impact-card">
+      <div class="k">Files generated</div>
+      <div class="v">${(result.files || []).length} files + README</div>
+    </div>
+  `;
+
+  document.getElementById("explainBox").textContent = result.explanation || "";
+  document.getElementById("issuesBox").style.display = "none";
+
+  const manifestHtml = `
+    <div class="manifest-box">
+      <h4>What's in the bundle</h4>
+      ${(result.manifest || []).map(m => `
+        <div class="manifest-row">
+          <div class="path">${escapeHtml(m.path)}</div>
+          <div class="purpose">${escapeHtml(m.purpose)}</div>
+        </div>
+      `).join("")}
+    </div>
+    <div class="download-row">
+      <button class="download-btn" id="downloadZipBtn">Download solution (.zip)</button>
+      <button class="push-git-btn" disabled title="Needs repo credentials not yet available under the current access model">
+        Push to Git <span class="soon-tag">COMING SOON</span>
+      </button>
+    </div>
+  `;
+
+  const explainEl = document.getElementById("explainBox");
+  explainEl.insertAdjacentHTML("afterend", manifestHtml);
+
+  document.getElementById("downloadZipBtn").addEventListener("click", () => downloadZip(result, proj));
+
+  const tabsEl = document.getElementById("codeTabs");
+  const panelsEl = document.getElementById("codePanels");
+  tabsEl.innerHTML = "";
+  panelsEl.innerHTML = "";
+
+  const files = [...(result.files || []), { path: "README.md", content: result.readme || "" }];
+  files.forEach((f, idx) => {
+    const tab = document.createElement("div");
+    tab.className = "code-tab" + (idx === 0 ? " active" : "");
+    tab.textContent = f.path;
+    tab.onclick = () => {
+      document.querySelectorAll(".code-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".code-panel").forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("panel-" + idx).classList.add("active");
+    };
+    tabsEl.appendChild(tab);
+
+    const panel = document.createElement("div");
+    panel.className = "code-panel" + (idx === 0 ? " active" : "");
+    panel.id = "panel-" + idx;
+    panel.innerHTML = `
+      <div class="code-panel-head">
+        <span class="fname">${escapeHtml(f.path)}</span>
+        <button class="copy-btn" data-idx="${idx}">Copy</button>
+      </div>
+      <pre class="code-block">${escapeHtml(f.content)}</pre>
+    `;
+    panelsEl.appendChild(panel);
+  });
+
+  panelsEl.querySelectorAll(".copy-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const idx = Number(btn.dataset.idx);
+      try {
+        await navigator.clipboard.writeText(files[idx].content);
+        btn.textContent = "Copied";
+        btn.classList.add("copied");
+        setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1500);
+      } catch (e) {}
+    };
+  });
+}
+
+async function runGenerate() {
+  hideError();
+  // clear any manifest/download row injected by a previous solution-mode run
+  document.querySelectorAll(".manifest-box, .download-row").forEach(el => el.remove());
+
+  const proj = PROJECTS.find(p => p.id === activeId);
+  const isSolution = activeMode === "solution";
+  const endpoint = isSolution ? "/api/generate-solution" : "/api/generate";
+
+  let payload = { projectId: activeId };
+  if (activeMode === "new") {
+    const req = document.getElementById("promptInput").value.trim();
+    if (!req) { showError("Describe what you need first."); return; }
+    payload.request = req;
+  } else if (activeMode === "existing") {
+    const iac = document.getElementById("existingIacInput").value.trim();
+    const pipeline = document.getElementById("existingPipelineInput").value.trim();
+    const context = document.getElementById("existingContextInput").value.trim();
+    if (!iac && !pipeline) { showError("Paste at least one existing file (IaC or pipeline)."); return; }
+    payload.existingIac = iac;
+    payload.existingPipeline = pipeline;
+    payload.request = context;
+  } else {
+    const req = document.getElementById("solutionPromptInput").value.trim();
+    if (!req) { showError("Describe the solution you need first."); return; }
+    if (checkedEnvs.size === 0) { showError("Pick at least one environment."); return; }
+    payload.request = req;
+    payload.environments = Array.from(checkedEnvs);
+  }
+
+  const btn = document.getElementById("genBtn");
+  btn.disabled = true;
+  document.getElementById("statusRow").style.display = "flex";
+  document.getElementById("statusText").textContent = isSolution ? "Generating full solution\u2026 (can take a few minutes)" : "Generating\u2026";
+
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = await res.json();
+    if (!res.ok) {
+      throw new Error(result.message || "Generation failed");
+    }
+    if (isSolution) {
+      renderSolutionResult(result, proj);
+    } else {
+      renderResult(result, proj);
+    }
+    showResults();
+  } catch (e) {
+    console.error(e);
+    showError("Generation failed: " + (e && e.message ? e.message : "unknown error") + ". Try again, or simplify the input.");
+  } finally {
+    btn.disabled = false;
+    document.getElementById("statusRow").style.display = "none";
+  }
+}
+
+function init() {
+  renderProjRow();
+  renderExamples();
+  renderEnvChecks();
+  renderSolutionExamples();
+  document.getElementById("genBtn").addEventListener("click", runGenerate);
+  document.getElementById("modeNewBtn").addEventListener("click", () => setMode("new"));
+  document.getElementById("modeExistingBtn").addEventListener("click", () => setMode("existing"));
+  document.getElementById("modeSolutionBtn").addEventListener("click", () => setMode("solution"));
+}
+
+init();
+</script>
+</body>
+</html>

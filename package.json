@@ -1,0 +1,15 @@
+{
+  "name": "ai-pipeline-environment-generator",
+  "version": "1.0.0",
+  "description": "Standalone AI Pipeline & Environment Generator - runs independently of claude.ai, deployable to AWS or Azure.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

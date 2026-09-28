@@ -1,0 +1,379 @@
+// server/index.js
+//
+// Minimal standalone backend for the AI Pipeline & Environment Generator.
+// Runs identically on AWS (ECS Fargate / App Runner) or Azure (Container Apps /
+// App Service for Containers) — it's a plain Node/Express container with no
+// cloud-specific SDK calls. The only cloud-specific piece is wherever you put
+// the ANTHROPIC_API_KEY secret (Secrets Manager on AWS, Key Vault on Azure).
+
+const express = require("express");
+const path = require("path");
+
+const app = express();
+app.use(express.json({ limit: "1mb" }));
+app.use(express.static(path.join(__dirname, "..", "public")));
+
+const PORT = process.env.PORT || 8080;
+const API_KEY = process.env.ANTHROPIC_API_KEY;
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5";
+
+if (!API_KEY) {
+  console.warn(
+    "WARNING: ANTHROPIC_API_KEY is not set. /api/generate will fail until it is configured."
+  );
+}
+
+const PROJECTS = {
+  stellantis: { name: "Stellantis (F2MC)", cloud: "AWS", iacTool: "CloudFormation", pipelineTool: "Azure DevOps YAML" },
+  tvh: { name: "True Value Hub", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
+  "hd-dms": { name: "Harley Davidson DMS", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
+};
+
+function buildPrompt({ project, userReq, existingIac, existingPipeline }) {
+  const hasExisting = Boolean((existingIac && existingIac.trim()) || (existingPipeline && existingPipeline.trim()));
+
+  const header = `You are an AI DevOps engineer helping modernize a real project. Project: "${project.name}" on ${project.cloud}. Infrastructure-as-code tool in use: ${project.iacTool}. Pipeline tool in use: ${project.pipelineTool}.`;
+
+  const requestBlock = `Request:\n"""\n${userReq || "(no specific request given — assess and improve the existing code below)"}\n"""`;
+
+  const existingBlock = hasExisting
+    ? `\nExisting code provided by the team (redacted of any real identifiers/secrets — treat placeholders like ACCOUNT_ID, <SUBSCRIPTION>, etc. as intentional):\n\n--- EXISTING IAC ---\n${existingIac || "(none provided)"}\n\n--- EXISTING PIPELINE ---\n${existingPipeline || "(none provided)"}\n`
+    : "";
+
+  const taskWithExisting = hasExisting
+    ? `Produce:
+1. A 2-3 sentence plain-English explanation for a non-technical audience of what's wrong with the existing code and what you changed.
+2. A list "existing_code_issues": 3-6 short, specific issues found in the existing code (maturity gaps: hardcoded values, no environment separation, missing security scanning, no remote state, etc.)
+3. An improved ${project.iacTool} snippet that fixes those issues while preserving the original intent (use placeholders for anything account/environment-specific; keep it focused, not exhaustive boilerplate).
+4. An improved ${project.pipelineTool} snippet, adding a security scanning gate (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets — whichever are relevant) and environment promotion stages if missing.
+5. "manual_effort_today": a realistic, conservative one-line estimate of how long a DevOps engineer would take to make these improvements by hand.
+6. "with_ai_estimate": a realistic one-line estimate of how long it takes with this generation approach plus human review.`
+    : `Produce:
+1. A 2-3 sentence plain-English explanation of what you generated and why, for a non-technical audience.
+2. A realistic ${project.iacTool} snippet implementing the request (placeholders for account/environment-specific values; brief comments; focused, not exhaustive boilerplate).
+3. A realistic ${project.pipelineTool} snippet implementing a CI/CD pipeline appropriate to the request, including a security scanning gate and environment promotion stages if relevant.
+4. "manual_effort_today": a realistic, conservative one-line estimate of how long a DevOps engineer would take to hand-write and test this.
+5. "with_ai_estimate": a realistic one-line estimate of how long it takes with this generation approach plus human review.`;
+
+  const schema = hasExisting
+    ? `{
+  "explanation": "string",
+  "existing_code_issues": ["string"],
+  "iac_filename": "string",
+  "iac_code": "string (the improved code, no markdown fences inside)",
+  "pipeline_filename": "string",
+  "pipeline_code": "string (the improved code, no markdown fences inside)",
+  "manual_effort_today": "string",
+  "with_ai_estimate": "string"
+}`
+    : `{
+  "explanation": "string",
+  "iac_filename": "string",
+  "iac_code": "string (the raw code, no markdown fences inside)",
+  "pipeline_filename": "string",
+  "pipeline_code": "string (the raw code, no markdown fences inside)",
+  "manual_effort_today": "string",
+  "with_ai_estimate": "string"
+}`;
+
+  return `${header}\n\n${requestBlock}\n${existingBlock}\n${taskWithExisting}\n\nRespond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:\n${schema}`;
+}
+
+function extractErrorDetail(errText) {
+  try {
+    const parsed = JSON.parse(errText);
+    return (parsed.error && parsed.error.message) || errText;
+  } catch (e) {
+    return errText;
+  }
+}
+
+// Streams the response instead of waiting for one large buffered reply —
+// a full solution bundle (many files + README) can take minutes and enough
+// output tokens to risk the plain fetch() call itself timing out.
+async function callAnthropicStreaming({ maxTokens, prompt }) {
+  const upstream = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": API_KEY,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      stream: true,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!upstream.ok) {
+    const errText = await upstream.text();
+    const err = new Error(errText);
+    err.status = upstream.status;
+    throw err;
+  }
+
+  let text = "";
+  let stopReason = null;
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  for await (const chunk of upstream.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue;
+      const jsonStr = line.slice(6).trim();
+      if (!jsonStr) continue;
+      let evt;
+      try {
+        evt = JSON.parse(jsonStr);
+      } catch (e) {
+        continue;
+      }
+      if (evt.type === "content_block_delta" && evt.delta && evt.delta.type === "text_delta") {
+        text += evt.delta.text;
+      } else if (evt.type === "message_delta" && evt.delta && evt.delta.stop_reason) {
+        stopReason = evt.delta.stop_reason;
+      }
+    }
+  }
+
+  return { text, stopReason };
+}
+
+// The model is asked to embed whole code/YAML files as JSON string values.
+// On large outputs it sometimes forgets to escape a literal newline/tab
+// inside one of those strings, which is invalid JSON even though the
+// overall structure is otherwise well-formed. Walk the text tracking
+// whether we're inside a string literal and escape any raw control
+// character found there.
+function escapeStrayControlChars(str) {
+  let result = "";
+  let inString = false;
+  let escapeNext = false;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (escapeNext) {
+      result += ch;
+      escapeNext = false;
+      continue;
+    }
+    if (ch === "\\") {
+      result += ch;
+      escapeNext = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      result += ch;
+      continue;
+    }
+    if (inString && (ch === "\n" || ch === "\r" || ch === "\t")) {
+      result += ch === "\n" ? "\\n" : ch === "\r" ? "\\r" : "\\t";
+      continue;
+    }
+    result += ch;
+  }
+  return result;
+}
+
+function parseModelJson(raw) {
+  // Try the raw text as-is first.
+  try {
+    return JSON.parse(raw.trim());
+  } catch (e) {
+    // fall through
+  }
+  // Strip any ```json / ``` fences anywhere in the text, not just at the
+  // very start/end, since the model sometimes adds a sentence before them.
+  const withoutFences = raw.replace(/```(?:json)?/gi, "");
+  try {
+    return JSON.parse(withoutFences.trim());
+  } catch (e) {
+    // fall through
+  }
+  // Repair stray unescaped control characters inside string literals.
+  try {
+    return JSON.parse(escapeStrayControlChars(withoutFences.trim()));
+  } catch (e) {
+    // fall through
+  }
+  // Last resort: grab everything between the first { and the last } and
+  // try that — handles a leading/trailing sentence around the JSON.
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    const slice = raw.slice(start, end + 1);
+    try {
+      return JSON.parse(slice);
+    } catch (e) {
+      return JSON.parse(escapeStrayControlChars(slice)); // let this throw if it still fails
+    }
+  }
+  throw new Error("No JSON object found in model output");
+}
+
+app.post("/api/generate", async (req, res) => {
+  try {
+    if (!API_KEY) {
+      return res.status(500).json({ error: "server_not_configured", message: "ANTHROPIC_API_KEY is not set on the server." });
+    }
+
+    const { projectId, request: userReq, existingIac, existingPipeline } = req.body || {};
+    const project = PROJECTS[projectId];
+    if (!project) {
+      return res.status(400).json({ error: "bad_request", message: "Unknown projectId." });
+    }
+    if (!userReq && !existingIac && !existingPipeline) {
+      return res.status(400).json({ error: "bad_request", message: "Provide a request, existing IaC, or existing pipeline." });
+    }
+
+    const prompt = buildPrompt({ project, userReq, existingIac, existingPipeline });
+
+    let raw, stopReason;
+    try {
+      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 16000, prompt }));
+    } catch (err) {
+      console.error("Anthropic API error:", err.status, err.message);
+      const detail = extractErrorDetail(err.message);
+      return res.status(502).json({
+        error: "upstream_error",
+        message: `Anthropic API returned ${err.status}: ${String(detail).slice(0, 400)}`,
+      });
+    }
+
+    if (stopReason === "max_tokens") {
+      console.error("Model output truncated at max_tokens:", raw);
+      return res.status(502).json({
+        error: "truncated",
+        message: "The model's response was cut off before it finished. Try a shorter/simpler request.",
+        raw,
+      });
+    }
+
+    let parsed;
+    try {
+      parsed = parseModelJson(raw);
+    } catch (e) {
+      console.error("Failed to parse model output as JSON:", raw);
+      return res.status(502).json({
+        error: "parse_error",
+        message: `Model did not return valid JSON. First 300 chars of its response: ${raw.slice(0, 300)}`,
+        raw,
+      });
+    }
+
+    res.json(parsed);
+  } catch (err) {
+    console.error("Unexpected error in /api/generate:", err);
+    res.status(500).json({ error: "internal_error", message: String(err && err.message ? err.message : err) });
+  }
+});
+
+function buildSolutionPrompt({ project, userReq, environments }) {
+  const envList = (environments && environments.length ? environments : ["dev", "qa", "staging", "prod"]).join(", ");
+
+  return `You are an AI DevOps engineer producing a COMPLETE, end-to-end DevOps solution package for a real request — not a single snippet, but the full set of files a team would need to adopt this.
+
+Project: "${project.name}" on ${project.cloud}. Infrastructure-as-code tool: ${project.iacTool}. Pipeline tool: ${project.pipelineTool}. Target environments: ${envList}.
+
+Request:
+"""
+${userReq}
+"""
+
+Produce a complete solution: environment-separated IaC (one set of files per environment or a modular structure with per-environment tfvars/parameters — your judgment on which fits ${project.iacTool} best), a full multi-stage pipeline covering all listed environments with approval gates between them, a security scanning gate appropriate to the stack (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets), and a README explaining what was generated, how to adopt it, and what to check before applying it.
+
+Use placeholders (ACCOUNT_ID, <SUBSCRIPTION_ID>, etc.) for anything account/environment-specific. Keep each file realistic and focused — this should look like something a competent engineer wrote, not exhaustive generated boilerplate.
+
+Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactly this shape:
+{
+  "explanation": "string - 2-3 sentences for a non-technical audience on what this solution does",
+  "manifest": [{"path": "string - file path", "purpose": "string - one line on what this file does"}],
+  "files": [{"path": "string - same paths as manifest", "content": "string - the raw file content, no markdown fences inside"}],
+  "readme": "string - a full README.md explaining the solution and adoption steps",
+  "manual_effort_today": "string - realistic, conservative estimate for a person to build this by hand",
+  "with_ai_estimate": "string - realistic estimate for generating this plus human review"
+}`;
+}
+
+app.post("/api/generate-solution", async (req, res) => {
+  try {
+    if (!API_KEY) {
+      return res.status(500).json({ error: "server_not_configured", message: "ANTHROPIC_API_KEY is not set on the server." });
+    }
+
+    const { projectId, request: userReq, environments } = req.body || {};
+    const project = PROJECTS[projectId];
+    if (!project) {
+      return res.status(400).json({ error: "bad_request", message: "Unknown projectId." });
+    }
+    if (!userReq) {
+      return res.status(400).json({ error: "bad_request", message: "Describe the solution you need." });
+    }
+
+    const prompt = buildSolutionPrompt({ project, userReq, environments });
+
+    let raw, stopReason;
+    try {
+      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 64000, prompt }));
+    } catch (err) {
+      console.error("Anthropic API error:", err.status, err.message);
+      const detail = extractErrorDetail(err.message);
+      return res.status(502).json({
+        error: "upstream_error",
+        message: `Anthropic API returned ${err.status}: ${String(detail).slice(0, 400)}`,
+      });
+    }
+
+    if (stopReason === "max_tokens") {
+      console.error("Model output truncated at max_tokens:", raw);
+      return res.status(502).json({
+        error: "truncated",
+        message: "The model's response was cut off before it finished. Try fewer environments or a narrower request.",
+        raw,
+      });
+    }
+
+    let parsed;
+    try {
+      parsed = parseModelJson(raw);
+    } catch (e) {
+      console.error("Failed to parse solution output as JSON:", raw);
+      return res.status(502).json({
+        error: "parse_error",
+        message: `Model did not return valid JSON. First 300 chars of its response: ${raw.slice(0, 300)}`,
+        raw,
+      });
+    }
+
+    res.json(parsed);
+  } catch (err) {
+    console.error("Unexpected error in /api/generate-solution:", err);
+    res.status(500).json({ error: "internal_error", message: String(err && err.message ? err.message : err) });
+  }
+});
+
+// Placeholder for future git-integrated delivery. Intentionally not implemented:
+// it needs real, per-project repo credentials (PAT / GitHub App / Azure DevOps
+// service connection) that don't exist yet under the current access model.
+// When that access exists, this is where a "create branch + commit files +
+// open PR" call to the GitHub/Azure DevOps REST API would go — reusing the
+// same `files` array /api/generate-solution already produces.
+app.post("/api/push-to-git", (req, res) => {
+  res.status(501).json({
+    error: "not_implemented",
+    message: "Git push is not enabled yet — it needs repo credentials that aren't available under the current access model. Download the bundle and hand it to the project team for now.",
+  });
+});
+
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok", model: MODEL, configured: Boolean(API_KEY) });
+});
+
+app.listen(PORT, () => {
+  console.log(`AI Pipeline & Environment Generator listening on port ${PORT}`);
+});
