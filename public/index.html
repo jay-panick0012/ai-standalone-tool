@@ -67,6 +67,36 @@
   .field-label { font-size: 12px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
   .field-hint { font-size: 11.5px; color: var(--muted-2); margin: 4px 0 0; }
 
+  .upload-zone {
+    border: 1px dashed var(--border); border-radius: 8px; padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px; background: var(--surface-2); flex-wrap: wrap;
+  }
+  .upload-zone.dragover { border-color: var(--accent); background: var(--accent-dim); }
+  .upload-zone-hint { font-size: 12px; color: var(--muted-2); }
+  button.upload-btn {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; padding: 8px 14px; font-size: 12.5px; cursor: pointer; font-weight: 600;
+  }
+  button.upload-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .uploaded-files { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .uploaded-file-chip {
+    display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); background: var(--surface);
+    border-radius: 7px; padding: 5px 8px 5px 10px; font-size: 12px; font-family: var(--mono); color: var(--muted);
+  }
+  .uploaded-file-chip .badge {
+    font-family: var(--sans); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.03em;
+    padding: 2px 6px; border-radius: 4px; font-weight: 700;
+  }
+  .uploaded-file-chip .badge.iac { background: var(--accent-dim); color: var(--accent); }
+  .uploaded-file-chip .badge.pipeline { background: rgba(245,165,36,0.15); color: var(--warn); }
+  .uploaded-file-chip .badge.skipped { background: rgba(139,152,168,0.15); color: var(--muted); }
+  .uploaded-file-chip .rm { cursor: pointer; color: var(--muted-2); font-weight: 700; padding: 0 2px; }
+  .uploaded-file-chip .rm:hover { color: var(--danger); }
+  .upload-clear-btn {
+    font-size: 11.5px; color: var(--muted-2); background: none; border: none; cursor: pointer;
+    text-decoration: underline; padding: 0; margin-top: 8px; display: inline-block;
+  }
+
   .examples { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .example-chip {
     border: 1px dashed var(--border); background: transparent; color: var(--muted);
@@ -214,10 +244,20 @@
     </div>
 
     <div id="existingModeFields" style="display:none;">
+      <div class="field-label">Upload from your machine (optional) &mdash; a .zip of the repo/folder, or individual IaC/pipeline files</div>
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="fileUploadInput" multiple accept=".zip,.tf,.tfvars,.bicep,.bicepparam,.hcl,.json,.yml,.yaml" style="display:none;">
+        <button type="button" class="upload-btn" id="uploadBtn">Choose .zip or files&hellip;</button>
+        <span class="upload-zone-hint">or drag &amp; drop a .zip / files here</span>
+      </div>
+      <div class="uploaded-files" id="uploadedFilesList"></div>
+      <button type="button" class="upload-clear-btn" id="clearUploadsBtn" style="display:none;">Clear uploaded files</button>
+      <p class="field-hint">Files are unzipped and read entirely in your browser (nothing is uploaded anywhere yet) and sorted into IaC vs pipeline below &mdash; uploading replaces the pasted text in those fields. State/secret files (.tfstate, .pem, .key, .env, credentials, etc.) and non-code files are skipped automatically, but review the fields below before generating.</p>
+
       <div class="field-label">Existing IaC (optional) &mdash; redact account IDs, hostnames, and any secret values first</div>
-      <textarea class="code-input" id="existingIacInput" placeholder="Paste an existing Terraform/Bicep/CloudFormation snippet here..."></textarea>
+      <textarea class="code-input" id="existingIacInput" placeholder="Paste an existing Terraform/Bicep/CloudFormation snippet here, or upload files above..."></textarea>
       <div class="field-label">Existing pipeline (optional)</div>
-      <textarea class="code-input" id="existingPipelineInput" placeholder="Paste an existing pipeline YAML here..."></textarea>
+      <textarea class="code-input" id="existingPipelineInput" placeholder="Paste an existing pipeline YAML here, or upload files above..."></textarea>
       <div class="field-label">What should improve? (optional context)</div>
       <textarea id="existingContextInput" placeholder="e.g. This is slow to deploy and has no security scanning gate"></textarea>
       <p class="field-hint">Never paste real credentials, API keys, or connection strings &mdash; use placeholders even in a test run.</p>
@@ -369,6 +409,171 @@ function renderSolutionExamples() {
     chip.title = ex;
     chip.onclick = () => { document.getElementById("solutionPromptInput").value = ex; };
     el.appendChild(chip);
+  });
+}
+
+// --- File / zip upload handling for "Review & improve existing code" mode ---
+
+const UPLOAD_SKIP_PATH_PATTERNS = [
+  /(^|\/)node_modules\//i, /(^|\/)\.git\//i, /(^|\/)dist\//i, /(^|\/)build\//i,
+  /(^|\/)vendor\//i, /(^|\/)__pycache__\//i, /(^|\/)\.terraform\//i,
+  /(^|\/)\.vscode\//i, /(^|\/)\.idea\//i, /(^|\/)__MACOSX\//i,
+];
+const UPLOAD_SKIP_FILE_PATTERNS = [
+  /\.tfstate(\.backup)?$/i, /\.(pem|key|pfx|p12|crt|cer)$/i, /(^|\/)\.env(\..*)?$/i,
+  /credentials(\.json)?$/i, /id_rsa/i, /(^|\/)\.npmrc$/i,
+];
+const UPLOAD_BINARY_EXT = new Set([
+  "png","jpg","jpeg","gif","ico","svg","pdf","zip","gz","tar","exe","dll","so",
+  "jar","war","class","ttf","woff","woff2","eot","mp4","mp3","bin","7z","rar",
+]);
+const UPLOAD_PIPELINE_NAME_PATTERNS = [
+  /azure-pipelines.*\.ya?ml$/i, /(^|\/)\.github\/workflows\/.*\.ya?ml$/i,
+  /(^|\/)jenkinsfile$/i, /\.gitlab-ci\.ya?ml$/i, /bitbucket-pipelines\.ya?ml$/i,
+  /buildspec\.ya?ml?$/i, /cloudbuild\.ya?ml$/i, /(^|\/)pipeline[^\/]*\.ya?ml$/i,
+];
+const UPLOAD_IAC_EXT = new Set(["tf", "tfvars", "bicep", "bicepparam", "hcl"]);
+const UPLOAD_MAX_FILE_CHARS = 200000;
+const UPLOAD_MAX_TOTAL_CHARS = 250000;
+
+let uploadedIacFiles = [];
+let uploadedPipelineFiles = [];
+let skippedUploadFiles = [];
+
+function shouldSkipUploadPath(path) {
+  return UPLOAD_SKIP_PATH_PATTERNS.some(re => re.test(path)) || UPLOAD_SKIP_FILE_PATTERNS.some(re => re.test(path));
+}
+
+function classifyUploadFile(path, content) {
+  const lower = path.toLowerCase();
+  if (UPLOAD_PIPELINE_NAME_PATTERNS.some(re => re.test(lower))) return "pipeline";
+  if (/(^|\/)dockerfile$/i.test(lower)) return "iac";
+  const ext = lower.includes(".") ? lower.split(".").pop() : "";
+  if (UPLOAD_IAC_EXT.has(ext)) return "iac";
+  if (ext === "json" || ext === "yml" || ext === "yaml") {
+    if (/AWSTemplateFormatVersion|"\$schema"\s*:\s*"https:\/\/schema\.management\.azure\.com/i.test(content)) return "iac";
+    if (/^\s*(stages|jobs|steps|trigger|pool)\s*:/mi.test(content)) return "pipeline";
+    return "iac";
+  }
+  return null; // unrecognized type — not included in either field
+}
+
+function addUploadedFile(path, content) {
+  const kind = classifyUploadFile(path, content);
+  if (kind === "iac") uploadedIacFiles.push({ path, content });
+  else if (kind === "pipeline") uploadedPipelineFiles.push({ path, content });
+  else skippedUploadFiles.push({ path, reason: "unsupported file type" });
+}
+
+async function readZipFile(file) {
+  const zip = await JSZip.loadAsync(file);
+  const entries = Object.values(zip.files);
+  for (const entry of entries) {
+    if (entry.dir) continue;
+    const path = entry.name;
+    if (shouldSkipUploadPath(path)) { skippedUploadFiles.push({ path, reason: "excluded (state/secret/build path)" }); continue; }
+    const ext = path.includes(".") ? path.toLowerCase().split(".").pop() : "";
+    if (UPLOAD_BINARY_EXT.has(ext)) { skippedUploadFiles.push({ path, reason: "binary file" }); continue; }
+    let content;
+    try {
+      content = await entry.async("string");
+    } catch (e) {
+      skippedUploadFiles.push({ path, reason: "could not read as text" });
+      continue;
+    }
+    if (content.length > UPLOAD_MAX_FILE_CHARS) content = content.slice(0, UPLOAD_MAX_FILE_CHARS) + "\n...[truncated - file too large]";
+    addUploadedFile(path, content);
+  }
+}
+
+async function readPlainFile(file) {
+  const path = file.name;
+  if (shouldSkipUploadPath(path)) { skippedUploadFiles.push({ path, reason: "excluded (state/secret file)" }); return; }
+  const ext = path.includes(".") ? path.toLowerCase().split(".").pop() : "";
+  if (UPLOAD_BINARY_EXT.has(ext)) { skippedUploadFiles.push({ path, reason: "binary file" }); return; }
+  let content;
+  try {
+    content = await file.text();
+  } catch (e) {
+    skippedUploadFiles.push({ path, reason: "could not read as text" });
+    return;
+  }
+  if (content.length > UPLOAD_MAX_FILE_CHARS) content = content.slice(0, UPLOAD_MAX_FILE_CHARS) + "\n...[truncated - file too large]";
+  addUploadedFile(path, content);
+}
+
+function capUploadTotal(text) {
+  return text.length > UPLOAD_MAX_TOTAL_CHARS
+    ? text.slice(0, UPLOAD_MAX_TOTAL_CHARS) + "\n...[truncated - combined upload size exceeded limit, trim some files]"
+    : text;
+}
+
+function rebuildTextareasFromUploads() {
+  const iacText = uploadedIacFiles.map(f => `// ==== ${f.path} ====\n${f.content}`).join("\n\n");
+  const pipelineText = uploadedPipelineFiles.map(f => `# ==== ${f.path} ====\n${f.content}`).join("\n\n");
+  document.getElementById("existingIacInput").value = capUploadTotal(iacText);
+  document.getElementById("existingPipelineInput").value = capUploadTotal(pipelineText);
+}
+
+function renderUploadedFilesList() {
+  const el = document.getElementById("uploadedFilesList");
+  el.innerHTML = "";
+  const all = [
+    ...uploadedIacFiles.map(f => ({ ...f, badge: "iac", label: "IaC" })),
+    ...uploadedPipelineFiles.map(f => ({ ...f, badge: "pipeline", label: "Pipeline" })),
+    ...skippedUploadFiles.map(f => ({ ...f, badge: "skipped", label: "Skipped" })),
+  ];
+  all.forEach(f => {
+    const chip = document.createElement("div");
+    chip.className = "uploaded-file-chip";
+    chip.title = f.reason || "";
+    chip.innerHTML = `<span class="badge ${f.badge}">${f.label}</span><span>${escapeHtml(f.path)}</span>`;
+    el.appendChild(chip);
+  });
+  document.getElementById("clearUploadsBtn").style.display = all.length ? "inline-block" : "none";
+}
+
+async function handleUploadedFileList(fileList) {
+  const files = Array.from(fileList || []);
+  for (const file of files) {
+    if (file.name.toLowerCase().endsWith(".zip")) {
+      await readZipFile(file);
+    } else {
+      await readPlainFile(file);
+    }
+  }
+  rebuildTextareasFromUploads();
+  renderUploadedFilesList();
+}
+
+function clearUploadedFiles() {
+  uploadedIacFiles = [];
+  uploadedPipelineFiles = [];
+  skippedUploadFiles = [];
+  document.getElementById("existingIacInput").value = "";
+  document.getElementById("existingPipelineInput").value = "";
+  document.getElementById("fileUploadInput").value = "";
+  renderUploadedFilesList();
+}
+
+function initUploadZone() {
+  const zone = document.getElementById("uploadZone");
+  const input = document.getElementById("fileUploadInput");
+  document.getElementById("uploadBtn").addEventListener("click", () => input.click());
+  input.addEventListener("change", async (e) => {
+    await handleUploadedFileList(e.target.files);
+    input.value = "";
+  });
+  document.getElementById("clearUploadsBtn").addEventListener("click", clearUploadedFiles);
+  ["dragover", "dragenter"].forEach(evt => zone.addEventListener(evt, (e) => {
+    e.preventDefault();
+    zone.classList.add("dragover");
+  }));
+  ["dragleave", "dragend"].forEach(evt => zone.addEventListener(evt, () => zone.classList.remove("dragover")));
+  zone.addEventListener("drop", async (e) => {
+    e.preventDefault();
+    zone.classList.remove("dragover");
+    await handleUploadedFileList(e.dataTransfer.files);
   });
 }
 
@@ -617,6 +822,7 @@ function init() {
   renderExamples();
   renderEnvChecks();
   renderSolutionExamples();
+  initUploadZone();
   document.getElementById("genBtn").addEventListener("click", runGenerate);
   document.getElementById("modeNewBtn").addEventListener("click", () => setMode("new"));
   document.getElementById("modeExistingBtn").addEventListener("click", () => setMode("existing"));

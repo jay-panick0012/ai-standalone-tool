@@ -9,8 +9,17 @@ Three modes:
 - **Generate from scratch** — describe an environment/pipeline in plain English,
   get back one IaC snippet and one pipeline snippet.
 - **Review & improve existing code** — paste an existing (redacted) pipeline
-  or IaC snippet and get back the issues found plus an improved version.
-  Use this when testing against a real project's files.
+  or IaC snippet, or upload it: a `.zip` of the repo/folder, or individual
+  IaC/pipeline files (Terraform, Bicep, CloudFormation, ARM, Dockerfile,
+  Azure Pipelines, GitHub Actions, Jenkinsfile, GitLab CI, etc.), and get
+  back the issues found plus an improved version. A zip is unzipped entirely
+  in the browser (JSZip) and each file is auto-sorted into the IaC field or
+  the pipeline field by filename/content; `.tfstate`, `.pem`/`.key`, `.env`,
+  and similar secret/state files are filtered out automatically, and
+  build/vendor directories (`node_modules`, `.git`, `dist`, etc.) are
+  skipped. Review the populated fields before generating — nothing is sent
+  to the backend until you click Generate. Use this when testing against a
+  real project's files.
 - **Full solution bundle** — describe an end-to-end need (e.g. "onboard a new
   client across dev/qa/staging/prod") and get back a *complete* file set:
   environment-separated IaC, a full multi-stage pipeline with security gates,

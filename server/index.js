@@ -10,7 +10,10 @@ const express = require("express");
 const path = require("path");
 
 const app = express();
-app.use(express.json({ limit: "1mb" }));
+// Bumped from 1mb: "Review & improve existing code" now accepts a zip/folder
+// upload (unzipped client-side and concatenated into existingIac/existingPipeline),
+// which can be larger than a single pasted snippet.
+app.use(express.json({ limit: "6mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 const PORT = process.env.PORT || 8080;
