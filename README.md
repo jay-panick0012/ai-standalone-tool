@@ -62,7 +62,21 @@ anywhere. `GET /api/health` should return `{"status":"ok","configured":true}`.
 
 ## 3. Deploy — same image, either cloud
 
-Build once, push to whichever registry the target cloud uses:
+This project's own instance already runs on Azure Container Apps
+(`ai-pipeline-generator` in resource group `rg-ai-devops-tool`, registry
+`experionaitoolacr.azurecr.io`), deployed automatically by
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) on every push
+to `main` — it builds the image, pushes it to ACR, then runs
+`az containerapp update` to roll it out. That workflow authenticates to
+Azure via OIDC (no stored secret); an Azure AD admin provisions the
+federated identity once with
+[`scripts/setup-azure-oidc.sh`](scripts/setup-azure-oidc.sh), which prints
+the three repo secrets (`AZURE_CLIENT_ID`, `AZURE_TENANT_ID`,
+`AZURE_SUBSCRIPTION_ID`) to add under repo Settings → Secrets and variables
+→ Actions.
+
+For a new environment/registry, or a manual one-off deploy, build once and
+push to whichever registry the target cloud uses:
 
 ```bash
 docker build -t ai-pipeline-generator:latest .

@@ -1,0 +1,55 @@
+name: Deploy to Azure Container Apps
+
+# Requires three repository secrets (see scripts/setup-azure-oidc.sh for how
+# an Azure AD admin provisions the identity that provides them):
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write # required for OIDC login to Azure
+  contents: read
+
+env:
+  REGISTRY: experionaitoolacr.azurecr.io
+  REGISTRY_NAME: experionaitoolacr
+  IMAGE_NAME: ai-pipeline-generator
+  RESOURCE_GROUP: rg-ai-devops-tool
+  CONTAINER_APP_NAME: ai-pipeline-generator
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name ${{ env.REGISTRY_NAME }}
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+          docker push "$IMAGE:${{ github.sha }}"
+          docker push "$IMAGE:latest"
+
+      - name: Deploy new image to Container App
+        run: |
+          az containerapp update \
+            --name ${{ env.CONTAINER_APP_NAME }} \
+            --resource-group ${{ env.RESOURCE_GROUP }} \
+            --image ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Azure logout
+        if: always()
+        run: az logout
