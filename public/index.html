@@ -40,15 +40,14 @@
 
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; margin-bottom: 18px; }
   .panel h3 { font-size: 12.5px; color: var(--muted); margin: 0 0 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  .panel h3.sub { margin-top: 18px; }
 
-  .proj-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-  .proj-chip {
+  .choice-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+  .choice-chip {
     border: 1px solid var(--border); background: var(--surface-2); color: var(--muted);
     border-radius: 999px; padding: 8px 14px; font-size: 13px; cursor: pointer; display: flex; gap: 8px; align-items: center;
   }
-  .proj-chip .tag { font-family: var(--mono); font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--border-soft); color: var(--muted-2); }
-  .proj-chip.active { border-color: var(--accent); color: var(--text); background: var(--accent-dim); font-weight: 600; }
-  .proj-chip.active .tag { color: var(--accent); }
+  .choice-chip.active { border-color: var(--accent); color: var(--text); background: var(--accent-dim); font-weight: 600; }
 
   .mode-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
   .mode-btn {
@@ -90,8 +89,6 @@
   .uploaded-file-chip .badge.iac { background: var(--accent-dim); color: var(--accent); }
   .uploaded-file-chip .badge.pipeline { background: rgba(245,165,36,0.15); color: var(--warn); }
   .uploaded-file-chip .badge.skipped { background: rgba(139,152,168,0.15); color: var(--muted); }
-  .uploaded-file-chip .rm { cursor: pointer; color: var(--muted-2); font-weight: 700; padding: 0 2px; }
-  .uploaded-file-chip .rm:hover { color: var(--danger); }
   .upload-clear-btn {
     font-size: 11.5px; color: var(--muted-2); background: none; border: none; cursor: pointer;
     text-decoration: underline; padding: 0; margin-top: 8px; display: inline-block;
@@ -114,41 +111,76 @@
   button.primary:disabled { opacity: 0.5; cursor: default; }
   button.primary:not(:disabled):hover { filter: brightness(1.08); }
 
+  button.stop-btn {
+    background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 8px;
+    padding: 10px 18px; font-weight: 700; font-size: 13.5px; cursor: pointer; display: none;
+  }
+  button.stop-btn:hover { background: rgba(247,106,106,0.12); }
+
   .status-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--muted); font-family: var(--mono); }
   .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted-2); }
   .dot.pulse { background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
 
-  .error-box {
-    background: rgba(247,106,106,0.12); border: 1px solid var(--danger); color: var(--text);
+  .error-box, .notice-box {
     border-radius: 8px; padding: 12px 14px; font-size: 13px; margin-top: 12px; display: none;
   }
-  .error-box.show { display: block; }
+  .error-box { background: rgba(247,106,106,0.12); border: 1px solid var(--danger); color: var(--text); }
+  .notice-box { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); }
+  .error-box.show, .notice-box.show { display: block; }
 
-  #results { display: none; }
-  #results.show { display: block; }
+  /* --- Consolidated results panel: one card, internal sections only --- */
+  .results-panel { display: none; }
+  .results-panel.show { display: block; }
 
-  .impact-row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+  .results-header {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 16px; margin-bottom: 16px; border-bottom: 1px solid var(--border-soft);
+  }
+  .results-title { font-size: 15px; font-weight: 700; }
+  .results-actions { display: flex; gap: 8px; align-items: center; }
+
+  select.format-select {
+    background: var(--surface-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 7px; padding: 9px 10px; font-size: 12.5px; cursor: pointer;
+  }
+  button.download-btn {
+    background: var(--accent); color: #06201C; border: none; border-radius: 8px;
+    padding: 9px 16px; font-weight: 700; font-size: 13px; cursor: pointer;
+  }
+  button.download-btn:hover { filter: brightness(1.08); }
+  button.push-git-btn {
+    background: var(--surface-2); color: var(--muted-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 9px 16px; font-weight: 600; font-size: 13px; cursor: not-allowed; display: flex; align-items: center; gap: 8px;
+  }
+  .soon-tag { font-family: var(--mono); font-size: 9.5px; background: var(--border); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+
+  .results-section { padding: 18px 0; border-bottom: 1px solid var(--border-soft); }
+  .results-section:first-of-type { padding-top: 0; }
+  .results-section:last-of-type { border-bottom: none; padding-bottom: 0; }
+  .results-section h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 12px; }
+
+  .impact-row { display: flex; gap: 14px; flex-wrap: wrap; }
   .impact-card {
-    flex: 1; min-width: 200px; background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px 18px;
+    flex: 1; min-width: 200px; background: var(--surface-2); border: 1px solid var(--border-soft);
+    border-radius: 8px; padding: 14px 16px;
   }
   .impact-card .k { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
   .impact-card .v { font-size: 15px; font-weight: 600; color: var(--accent); }
 
-  .explain-box {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 16px 20px; margin-bottom: 18px; font-size: 14px;
-  }
-  .issues-box {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 16px 20px; margin-bottom: 18px;
-  }
-  .issues-box h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 10px; }
-  .issues-box ul { margin: 0; padding-left: 20px; font-size: 13.5px; }
-  .issues-box li { margin-bottom: 6px; color: #F0A5A5; }
+  .explain-text { font-size: 14px; }
 
-  .code-tabs { display: flex; gap: 6px; margin-bottom: -1px; }
+  .issues-list { margin: 0; padding-left: 20px; font-size: 13.5px; }
+  .issues-list li { margin-bottom: 6px; color: #F0A5A5; }
+
+  .manifest-row {
+    display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px;
+  }
+  .manifest-row:last-child { border-bottom: none; }
+  .manifest-row .path { font-family: var(--mono); color: var(--accent); width: 320px; flex-shrink: 0; word-break: break-all; }
+  .manifest-row .purpose { color: var(--muted); }
+
+  .code-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: -1px; }
   .code-tab {
     background: var(--surface-2); border: 1px solid var(--border); border-bottom: none;
     border-radius: 8px 8px 0 0; padding: 9px 16px; font-size: 12.5px; color: var(--muted);
@@ -157,7 +189,7 @@
   .code-tab.active { background: var(--surface); color: var(--accent); border-color: var(--accent); }
 
   .code-panel {
-    display: none; background: var(--surface); border: 1px solid var(--border); border-radius: 0 10px 10px 10px;
+    display: none; background: var(--surface-2); border: 1px solid var(--border); border-radius: 0 10px 10px 10px;
     overflow: hidden;
   }
   .code-panel.active { display: block; }
@@ -167,7 +199,7 @@
   }
   .code-panel-head .fname { font-family: var(--mono); font-size: 12px; color: var(--muted); }
   .copy-btn {
-    background: var(--surface-2); border: 1px solid var(--border); color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border); color: var(--muted);
     border-radius: 6px; padding: 5px 11px; font-size: 11.5px; cursor: pointer;
   }
   .copy-btn:hover { color: var(--text); border-color: var(--accent); }
@@ -190,30 +222,6 @@
   .env-check.checked { border-color: var(--accent); color: var(--text); background: var(--accent-dim); }
   .env-check input { accent-color: var(--accent); }
 
-  .manifest-box {
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 16px 20px; margin-bottom: 18px;
-  }
-  .manifest-box h4 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); margin: 0 0 12px; }
-  .manifest-row {
-    display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px;
-  }
-  .manifest-row:last-child { border-bottom: none; }
-  .manifest-row .path { font-family: var(--mono); color: var(--accent); width: 320px; flex-shrink: 0; word-break: break-all; }
-  .manifest-row .purpose { color: var(--muted); }
-
-  .download-row { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
-  button.download-btn {
-    background: var(--accent); color: #06201C; border: none; border-radius: 8px;
-    padding: 11px 20px; font-weight: 700; font-size: 13.5px; cursor: pointer;
-  }
-  button.download-btn:hover { filter: brightness(1.08); }
-  button.push-git-btn {
-    background: var(--surface-2); color: var(--muted-2); border: 1px solid var(--border); border-radius: 8px;
-    padding: 11px 20px; font-weight: 600; font-size: 13.5px; cursor: not-allowed; display: flex; align-items: center; gap: 8px;
-  }
-  .soon-tag { font-family: var(--mono); font-size: 9.5px; background: var(--border); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
-
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 </style>
@@ -223,14 +231,20 @@
   <div class="head">
     <div class="eyebrow">devops.ai &middot; generator &middot; standalone</div>
     <h1>AI Pipeline &amp; Environment Generator</h1>
-    <p>Paste an existing pipeline or IaC file to get a gap review and an improved version, or describe a new environment/pipeline from scratch. Runs entirely from this server — nothing is sent anywhere except the AI API call.</p>
+    <p>Describe a new environment/pipeline, paste or upload an existing one for review, or request a full solution bundle &mdash; for any cloud, IaC tool, and pipeline tool. Runs entirely from this server — nothing is sent anywhere except the AI API call.</p>
   </div>
 
   <div class="panel">
-    <h3>Project / cloud context</h3>
-    <div class="proj-row" id="projRow"></div>
+    <h3>Cloud provider</h3>
+    <div class="choice-row" id="cloudRow"></div>
 
-    <h3 style="margin-top:6px;">Mode</h3>
+    <h3 class="sub">IaC tool</h3>
+    <div class="choice-row" id="iacRow"></div>
+
+    <h3 class="sub">Pipeline tool</h3>
+    <div class="choice-row" id="pipelineRow"></div>
+
+    <h3 class="sub">Mode</h3>
     <div class="mode-toggle">
       <div class="mode-btn" data-mode="new" id="modeNewBtn">Generate from scratch</div>
       <div class="mode-btn" data-mode="existing" id="modeExistingBtn">Review &amp; improve existing code</div>
@@ -239,7 +253,7 @@
 
     <div id="newModeFields" style="display:none;">
       <div class="field-label">Describe what you need</div>
-      <textarea id="promptInput" placeholder="e.g. New client onboarding: dev, qa, staging and prod environments with AKS, Azure SQL and Key Vault, plus a 4-stage deployment pipeline"></textarea>
+      <textarea id="promptInput" placeholder="e.g. New client onboarding: dev, qa, staging and prod environments with a managed Kubernetes cluster, managed SQL database and a secrets store, plus a 4-stage deployment pipeline"></textarea>
       <div class="examples" id="examplesRow"></div>
     </div>
 
@@ -257,7 +271,7 @@
       <div class="field-label">Existing IaC (optional) &mdash; redact account IDs, hostnames, and any secret values first</div>
       <textarea class="code-input" id="existingIacInput" placeholder="Paste an existing Terraform/Bicep/CloudFormation snippet here, or upload files above..."></textarea>
       <div class="field-label">Existing pipeline (optional)</div>
-      <textarea class="code-input" id="existingPipelineInput" placeholder="Paste an existing pipeline YAML here, or upload files above..."></textarea>
+      <textarea class="code-input" id="existingPipelineInput" placeholder="Paste an existing pipeline YAML/config here, or upload files above..."></textarea>
       <div class="field-label">What should improve? (optional context)</div>
       <textarea id="existingContextInput" placeholder="e.g. This is slow to deploy and has no security scanning gate"></textarea>
       <p class="field-hint">Never paste real credentials, API keys, or connection strings &mdash; use placeholders even in a test run.</p>
@@ -265,7 +279,7 @@
 
     <div id="solutionModeFields">
       <div class="field-label">Describe the end-to-end solution you need</div>
-      <textarea id="solutionPromptInput" placeholder="e.g. Full onboarding setup for a new client: all environments with AKS, Azure SQL MI, Key Vault and tenant Blob storage, plus the complete promotion pipeline with security gates"></textarea>
+      <textarea id="solutionPromptInput" placeholder="e.g. Full onboarding setup for a new client: all environments with a managed Kubernetes cluster, managed database, secrets store and tenant object storage, plus the complete promotion pipeline with security gates"></textarea>
       <div class="field-label">Environments to include</div>
       <div class="env-checks" id="envChecks"></div>
       <div class="examples" id="solutionExamplesRow"></div>
@@ -278,70 +292,102 @@
         <div class="status-row" id="statusRow" style="display:none;">
           <span class="dot pulse"></span><span id="statusText">Generating&hellip;</span>
         </div>
+        <button class="stop-btn" id="stopBtn">Stop generating</button>
         <button class="primary" id="genBtn">Generate</button>
       </div>
     </div>
     <div class="error-box" id="errorBox"></div>
+    <div class="notice-box" id="noticeBox"></div>
   </div>
 
-  <div id="results">
-    <div class="impact-row" id="impactRow"></div>
-    <div class="explain-box" id="explainBox"></div>
-    <div class="issues-box" id="issuesBox" style="display:none;">
-      <h4>Issues found in the existing code</h4>
-      <ul id="issuesList"></ul>
+  <div class="panel results-panel" id="resultsPanel">
+    <div class="results-header">
+      <div class="results-title" id="resultsTitle">Results</div>
+      <div class="results-actions">
+        <select class="format-select" id="downloadFormatSelect">
+          <option value="zip">.zip</option>
+          <option value="tar">.tar</option>
+        </select>
+        <button class="download-btn" id="downloadBtn">Download</button>
+        <button class="push-git-btn" disabled title="Needs repo credentials not yet available under the current access model &mdash; coming later">
+          Push to Git <span class="soon-tag">LATER</span>
+        </button>
+      </div>
     </div>
 
-    <div class="code-tabs" id="codeTabs"></div>
-    <div id="codePanels"></div>
+    <div class="results-section">
+      <div class="impact-row" id="impactRow"></div>
+    </div>
+
+    <div class="results-section">
+      <h4>Summary</h4>
+      <div class="explain-text" id="explainBox"></div>
+    </div>
+
+    <div class="results-section" id="issuesSection" style="display:none;">
+      <h4>Issues found in the existing code</h4>
+      <ul class="issues-list" id="issuesList"></ul>
+    </div>
+
+    <div class="results-section" id="manifestSection" style="display:none;">
+      <h4>What's in the bundle</h4>
+      <div id="manifestList"></div>
+    </div>
+
+    <div class="results-section">
+      <div class="code-tabs" id="codeTabs"></div>
+      <div id="codePanels"></div>
+    </div>
   </div>
 
   <div class="empty-state" id="emptyState">
     <div class="big">No output yet</div>
-    <div>Pick a project and mode, fill in the fields, and click Generate.</div>
+    <div>Pick your cloud/tooling and mode, fill in the fields, and click Generate.</div>
   </div>
 
   <p class="footnote">Standalone deployment &middot; calls the Anthropic API directly via this server &middot; no claude.ai dependency</p>
 </div>
 
 <script>
-const PROJECTS = [
-  { id: "stellantis", name: "Stellantis (F2MC)", cloud: "AWS", iacTool: "CloudFormation", pipelineTool: "Azure DevOps YAML" },
-  { id: "tvh", name: "True Value Hub", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
-  { id: "hd-dms", name: "Harley Davidson DMS", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
-];
+const CLOUD_PROVIDERS = ["AWS", "Azure", "GCP", "Other / multi-cloud"];
+const IAC_TOOLS = ["Terraform", "Bicep", "CloudFormation", "ARM Templates", "Pulumi", "AWS CDK", "OpenTofu", "Ansible"];
+const PIPELINE_TOOLS = ["GitHub Actions", "Azure DevOps", "Jenkins", "GitLab CI/CD", "Harness", "CircleCI", "Bitbucket Pipelines", "AWS CodePipeline"];
 
 const EXAMPLES = {
-  stellantis: [
-    "New ECS service with an RDS Postgres database and an ALB listener rule, tagged and using the existing VPC",
-    "A four-environment (Dev/QC/UAT/Prod) CloudFormation template set for an S3 + CloudFront static site",
+  AWS: [
+    "New ECS service with an RDS Postgres database and an ALB listener rule, using an existing VPC",
+    "A four-environment (Dev/QA/UAT/Prod) template set for an S3 + CloudFront static site",
   ],
-  tvh: [
-    "Onboard a new client: dev, qa, staging and prod environments with AKS namespace, Azure SQL MI database and a tenant Blob container",
+  Azure: [
+    "Onboard a new client: dev, qa, staging and prod environments with an AKS namespace, Azure SQL MI database and a tenant Blob container",
     "A 4-stage build-once-promote pipeline for a .NET 6 API deploying the same artifact through Dev to Prod",
   ],
-  "hd-dms": [
-    "An App Service, SQL database and Key Vault for a new dealer-facing module, with secrets pulled from Key Vault via managed identity",
-    "A release pipeline with pre-release readiness checks, Trivy + Snyk scanning gates, and an automated rollback stage",
+  GCP: [
+    "A Cloud Run service with a Cloud SQL Postgres instance and a load balancer, using an existing VPC",
+    "A 3-stage pipeline (dev/staging/prod) deploying a containerized API to GKE with image scanning",
+  ],
+  "Other / multi-cloud": [
+    "A new environment with a managed Kubernetes cluster, managed database, and secrets manager, plus a CI/CD pipeline with security scanning gates",
   ],
 };
 
-let activeId = "stellantis";
+const SOLUTION_EXAMPLES = {
+  AWS: ["Full Dev/QA/UAT/Prod setup for an ECS service with RDS, plus the full promotion pipeline"],
+  Azure: ["Complete new-client onboarding: dev/qa/staging/prod with AKS namespace, Azure SQL MI, Key Vault and tenant Blob storage, plus the full 4-stage pipeline"],
+  GCP: ["Full environment set for a containerized service on GKE with Cloud SQL and Secret Manager, plus a release pipeline with image scanning and rollback"],
+  "Other / multi-cloud": ["Full environment set for a new module: compute, managed database, secrets store, plus a release pipeline with readiness checks and rollback"],
+};
+
+let activeCloud = "AWS";
+let activeIac = "Terraform";
+let activePipeline = "GitHub Actions";
 let activeMode = "solution";
 const ENVS = ["dev", "qa", "staging", "prod"];
 let checkedEnvs = new Set(ENVS);
 
-const SOLUTION_EXAMPLES = {
-  stellantis: [
-    "Full Dev/QC/UAT/Prod CloudFormation setup for an ECS service with RDS",
-  ],
-  tvh: [
-    "Complete new-client onboarding: dev/qa/staging/prod with AKS namespace, Azure SQL MI, Key Vault and tenant Blob storage, plus the full 4-stage pipeline",
-  ],
-  "hd-dms": [
-    "Full environment set for a new dealer-facing module: App Service, SQL, Key Vault, plus a release pipeline with readiness checks and rollback",
-  ],
-};
+let currentResult = null;
+let currentMode = null;
+let currentAbortController = null;
 
 function escapeHtml(str) {
   const d = document.createElement("div");
@@ -349,27 +395,46 @@ function escapeHtml(str) {
   return d.innerHTML;
 }
 
-function renderProjRow() {
-  const el = document.getElementById("projRow");
+function renderChoiceRow(containerId, options, getActive, onPick) {
+  const el = document.getElementById(containerId);
   el.innerHTML = "";
-  PROJECTS.forEach(p => {
+  options.forEach(opt => {
     const chip = document.createElement("div");
-    chip.className = "proj-chip" + (p.id === activeId ? " active" : "");
-    chip.innerHTML = `${escapeHtml(p.name)} <span class="tag">${escapeHtml(p.cloud)}</span>`;
-    chip.onclick = () => { activeId = p.id; renderProjRow(); renderExamples(); renderSolutionExamples(); };
+    chip.className = "choice-chip" + (opt === getActive() ? " active" : "");
+    chip.textContent = opt;
+    chip.onclick = () => { onPick(opt); renderAllChoiceRows(); };
     el.appendChild(chip);
   });
+}
+
+function renderAllChoiceRows() {
+  renderChoiceRow("cloudRow", CLOUD_PROVIDERS, () => activeCloud, (v) => { activeCloud = v; renderExamples(); renderSolutionExamples(); });
+  renderChoiceRow("iacRow", IAC_TOOLS, () => activeIac, (v) => { activeIac = v; });
+  renderChoiceRow("pipelineRow", PIPELINE_TOOLS, () => activePipeline, (v) => { activePipeline = v; });
 }
 
 function renderExamples() {
   const el = document.getElementById("examplesRow");
   el.innerHTML = "";
-  (EXAMPLES[activeId] || []).forEach(ex => {
+  (EXAMPLES[activeCloud] || []).forEach(ex => {
     const chip = document.createElement("div");
     chip.className = "example-chip";
     chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
     chip.title = ex;
     chip.onclick = () => { document.getElementById("promptInput").value = ex; };
+    el.appendChild(chip);
+  });
+}
+
+function renderSolutionExamples() {
+  const el = document.getElementById("solutionExamplesRow");
+  el.innerHTML = "";
+  (SOLUTION_EXAMPLES[activeCloud] || []).forEach(ex => {
+    const chip = document.createElement("div");
+    chip.className = "example-chip";
+    chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
+    chip.title = ex;
+    chip.onclick = () => { document.getElementById("solutionPromptInput").value = ex; };
     el.appendChild(chip);
   });
 }
@@ -396,19 +461,6 @@ function renderEnvChecks() {
       renderEnvChecks();
     });
     el.appendChild(label);
-  });
-}
-
-function renderSolutionExamples() {
-  const el = document.getElementById("solutionExamplesRow");
-  el.innerHTML = "";
-  (SOLUTION_EXAMPLES[activeId] || []).forEach(ex => {
-    const chip = document.createElement("div");
-    chip.className = "example-chip";
-    chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
-    chip.title = ex;
-    chip.onclick = () => { document.getElementById("solutionPromptInput").value = ex; };
-    el.appendChild(chip);
   });
 }
 
@@ -579,146 +631,99 @@ function initUploadZone() {
 
 function hideError() { const e = document.getElementById("errorBox"); e.classList.remove("show"); e.textContent = ""; }
 function showError(msg) { const e = document.getElementById("errorBox"); e.textContent = msg; e.classList.add("show"); }
-function showResults() { document.getElementById("results").classList.add("show"); document.getElementById("emptyState").style.display = "none"; }
+function hideNotice() { const e = document.getElementById("noticeBox"); e.classList.remove("show"); e.textContent = ""; }
+function showNotice(msg) { const e = document.getElementById("noticeBox"); e.textContent = msg; e.classList.add("show"); }
+function showResultsPanel() { document.getElementById("resultsPanel").classList.add("show"); document.getElementById("emptyState").style.display = "none"; }
 
-function renderResult(result, proj) {
-  document.getElementById("impactRow").innerHTML = `
-    <div class="impact-card">
-      <div class="k">Manual effort today</div>
-      <div class="v">${escapeHtml(result.manual_effort_today || "\u2013")}</div>
-    </div>
-    <div class="impact-card">
-      <div class="k">With AI generation</div>
-      <div class="v">${escapeHtml(result.with_ai_estimate || "\u2013")}</div>
-    </div>
-    <div class="impact-card">
-      <div class="k">Target stack</div>
-      <div class="v">${escapeHtml(proj.iacTool)} + ${escapeHtml(proj.pipelineTool)}</div>
-    </div>
-  `;
+// --- Minimal USTAR tar writer (no dependency needed for .tar export) ---
+function buildTarBlob(files) {
+  const encoder = new TextEncoder();
+  const blocks = [];
 
-  document.getElementById("explainBox").textContent = result.explanation || "";
-
-  const issuesBox = document.getElementById("issuesBox");
-  const issuesList = document.getElementById("issuesList");
-  if (result.existing_code_issues && result.existing_code_issues.length) {
-    issuesList.innerHTML = result.existing_code_issues.map(i => `<li>${escapeHtml(i)}</li>`).join("");
-    issuesBox.style.display = "block";
-  } else {
-    issuesBox.style.display = "none";
+  function padOctal(num, len) {
+    return num.toString(8).padStart(len - 1, "0") + "\0";
   }
 
-  const tabsEl = document.getElementById("codeTabs");
-  const panelsEl = document.getElementById("codePanels");
-  tabsEl.innerHTML = "";
-  panelsEl.innerHTML = "";
+  (files || []).forEach(f => {
+    const path = (f.path || "file").slice(0, 100);
+    if ((f.path || "").length > 100) console.warn(`Tar entry name too long, truncated: ${f.path}`);
+    const contentBytes = encoder.encode(f.content || "");
+    const header = new Uint8Array(512);
 
-  const files = [
-    { label: proj.iacTool, filename: result.iac_filename || "main.tf", code: result.iac_code || "" },
-    { label: proj.pipelineTool, filename: result.pipeline_filename || "azure-pipelines.yml", code: result.pipeline_code || "" },
-  ];
+    function writeStr(offset, str, maxLen) {
+      header.set(encoder.encode(str).slice(0, maxLen), offset);
+    }
 
-  files.forEach((f, idx) => {
-    const tab = document.createElement("div");
-    tab.className = "code-tab" + (idx === 0 ? " active" : "");
-    tab.textContent = f.label;
-    tab.onclick = () => {
-      document.querySelectorAll(".code-tab").forEach(t => t.classList.remove("active"));
-      document.querySelectorAll(".code-panel").forEach(p => p.classList.remove("active"));
-      tab.classList.add("active");
-      document.getElementById("panel-" + idx).classList.add("active");
-    };
-    tabsEl.appendChild(tab);
+    writeStr(0, path, 100);
+    writeStr(100, padOctal(0o644, 8), 8);
+    writeStr(108, padOctal(0, 8), 8);
+    writeStr(116, padOctal(0, 8), 8);
+    writeStr(124, padOctal(contentBytes.length, 12), 12);
+    writeStr(136, padOctal(Math.floor(Date.now() / 1000), 12), 12);
+    for (let i = 148; i < 156; i++) header[i] = 0x20; // chksum placeholder
+    header[156] = "0".charCodeAt(0); // typeflag: regular file
+    writeStr(257, "ustar", 6);
+    writeStr(263, "00", 2);
 
-    const panel = document.createElement("div");
-    panel.className = "code-panel" + (idx === 0 ? " active" : "");
-    panel.id = "panel-" + idx;
-    panel.innerHTML = `
-      <div class="code-panel-head">
-        <span class="fname">${escapeHtml(f.filename)}</span>
-        <button class="copy-btn" data-idx="${idx}">Copy</button>
-      </div>
-      <pre class="code-block">${escapeHtml(f.code)}</pre>
-    `;
-    panelsEl.appendChild(panel);
+    let checksum = 0;
+    for (let i = 0; i < 512; i++) checksum += header[i];
+    writeStr(148, checksum.toString(8).padStart(6, "0") + "\0 ", 8);
+
+    blocks.push(header);
+    blocks.push(contentBytes);
+    const padLen = (512 - (contentBytes.length % 512)) % 512;
+    if (padLen) blocks.push(new Uint8Array(padLen));
   });
 
-  panelsEl.querySelectorAll(".copy-btn").forEach(btn => {
-    btn.onclick = async () => {
-      const idx = Number(btn.dataset.idx);
-      try {
-        await navigator.clipboard.writeText(files[idx].code);
-        btn.textContent = "Copied";
-        btn.classList.add("copied");
-        setTimeout(() => { btn.textContent = "Copy"; btn.classList.remove("copied"); }, 1500);
-      } catch (e) {}
-    };
-  });
+  blocks.push(new Uint8Array(1024)); // end-of-archive marker
+  return new Blob(blocks, { type: "application/x-tar" });
 }
 
-async function downloadZip(result, proj) {
-  const zip = new JSZip();
-  (result.files || []).forEach(f => zip.file(f.path, f.content || ""));
-  if (result.readme) zip.file("README.md", result.readme);
-  const blob = await zip.generateAsync({ type: "blob" });
+function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${activeId}-solution-bundle.zip`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
-function renderSolutionResult(result, proj) {
-  document.getElementById("impactRow").innerHTML = `
-    <div class="impact-card">
-      <div class="k">Manual effort today</div>
-      <div class="v">${escapeHtml(result.manual_effort_today || "\u2013")}</div>
-    </div>
-    <div class="impact-card">
-      <div class="k">With AI generation</div>
-      <div class="v">${escapeHtml(result.with_ai_estimate || "\u2013")}</div>
-    </div>
-    <div class="impact-card">
-      <div class="k">Files generated</div>
-      <div class="v">${(result.files || []).length} files + README</div>
-    </div>
-  `;
+function filesForCurrentResult() {
+  if (!currentResult) return [];
+  if (currentMode === "solution") {
+    const files = [...(currentResult.files || [])];
+    if (currentResult.readme) files.push({ path: "README.md", content: currentResult.readme });
+    return files;
+  }
+  return [
+    { path: currentResult.iac_filename || "main.tf", content: currentResult.iac_code || "" },
+    { path: currentResult.pipeline_filename || "pipeline.yml", content: currentResult.pipeline_code || "" },
+  ];
+}
 
-  document.getElementById("explainBox").textContent = result.explanation || "";
-  document.getElementById("issuesBox").style.display = "none";
+async function downloadBundle() {
+  const files = filesForCurrentResult();
+  if (!files.length) return;
+  const format = document.getElementById("downloadFormatSelect").value;
+  const baseName = "pipeline-environment-bundle";
+  if (format === "tar") {
+    triggerDownload(buildTarBlob(files), `${baseName}.tar`);
+  } else {
+    const zip = new JSZip();
+    files.forEach(f => zip.file(f.path, f.content || ""));
+    const blob = await zip.generateAsync({ type: "blob" });
+    triggerDownload(blob, `${baseName}.zip`);
+  }
+}
 
-  const manifestHtml = `
-    <div class="manifest-box">
-      <h4>What's in the bundle</h4>
-      ${(result.manifest || []).map(m => `
-        <div class="manifest-row">
-          <div class="path">${escapeHtml(m.path)}</div>
-          <div class="purpose">${escapeHtml(m.purpose)}</div>
-        </div>
-      `).join("")}
-    </div>
-    <div class="download-row">
-      <button class="download-btn" id="downloadZipBtn">Download solution (.zip)</button>
-      <button class="push-git-btn" disabled title="Needs repo credentials not yet available under the current access model">
-        Push to Git <span class="soon-tag">COMING SOON</span>
-      </button>
-    </div>
-  `;
-
-  const explainEl = document.getElementById("explainBox");
-  explainEl.insertAdjacentHTML("afterend", manifestHtml);
-
-  document.getElementById("downloadZipBtn").addEventListener("click", () => downloadZip(result, proj));
-
+function renderCodeTabs(files) {
   const tabsEl = document.getElementById("codeTabs");
   const panelsEl = document.getElementById("codePanels");
   tabsEl.innerHTML = "";
   panelsEl.innerHTML = "";
 
-  const files = [...(result.files || []), { path: "README.md", content: result.readme || "" }];
   files.forEach((f, idx) => {
     const tab = document.createElement("div");
     tab.className = "code-tab" + (idx === 0 ? " active" : "");
@@ -757,16 +762,75 @@ function renderSolutionResult(result, proj) {
   });
 }
 
+function renderResults(result, mode) {
+  currentResult = result;
+  currentMode = mode;
+
+  document.getElementById("resultsTitle").textContent =
+    mode === "solution" ? "Generated solution bundle" :
+    mode === "existing" ? "Review & improvement results" :
+    "Generated environment & pipeline";
+
+  const thirdCard = mode === "solution"
+    ? `<div class="impact-card"><div class="k">Files generated</div><div class="v">${(result.files || []).length} files + README</div></div>`
+    : `<div class="impact-card"><div class="k">Target stack</div><div class="v">${escapeHtml(activeIac)} + ${escapeHtml(activePipeline)}</div></div>`;
+
+  document.getElementById("impactRow").innerHTML = `
+    <div class="impact-card">
+      <div class="k">Manual effort today</div>
+      <div class="v">${escapeHtml(result.manual_effort_today || "–")}</div>
+    </div>
+    <div class="impact-card">
+      <div class="k">With AI generation</div>
+      <div class="v">${escapeHtml(result.with_ai_estimate || "–")}</div>
+    </div>
+    ${thirdCard}
+  `;
+
+  document.getElementById("explainBox").textContent = result.explanation || "";
+
+  const issuesSection = document.getElementById("issuesSection");
+  const issuesList = document.getElementById("issuesList");
+  if (result.existing_code_issues && result.existing_code_issues.length) {
+    issuesList.innerHTML = result.existing_code_issues.map(i => `<li>${escapeHtml(i)}</li>`).join("");
+    issuesSection.style.display = "block";
+  } else {
+    issuesSection.style.display = "none";
+  }
+
+  const manifestSection = document.getElementById("manifestSection");
+  const manifestList = document.getElementById("manifestList");
+  if (mode === "solution" && result.manifest && result.manifest.length) {
+    manifestList.innerHTML = result.manifest.map(m => `
+      <div class="manifest-row">
+        <div class="path">${escapeHtml(m.path)}</div>
+        <div class="purpose">${escapeHtml(m.purpose)}</div>
+      </div>
+    `).join("");
+    manifestSection.style.display = "block";
+  } else {
+    manifestSection.style.display = "none";
+  }
+
+  renderCodeTabs(filesForCurrentResult());
+}
+
+function setGeneratingUi(isGenerating, statusText) {
+  document.getElementById("genBtn").disabled = isGenerating;
+  document.getElementById("genBtn").style.display = isGenerating ? "none" : "inline-block";
+  document.getElementById("stopBtn").style.display = isGenerating ? "inline-block" : "none";
+  document.getElementById("statusRow").style.display = isGenerating ? "flex" : "none";
+  if (statusText) document.getElementById("statusText").textContent = statusText;
+}
+
 async function runGenerate() {
   hideError();
-  // clear any manifest/download row injected by a previous solution-mode run
-  document.querySelectorAll(".manifest-box, .download-row").forEach(el => el.remove());
+  hideNotice();
 
-  const proj = PROJECTS.find(p => p.id === activeId);
   const isSolution = activeMode === "solution";
   const endpoint = isSolution ? "/api/generate-solution" : "/api/generate";
 
-  let payload = { projectId: activeId };
+  let payload = { cloud: activeCloud, iacTool: activeIac, pipelineTool: activePipeline };
   if (activeMode === "new") {
     const req = document.getElementById("promptInput").value.trim();
     if (!req) { showError("Describe what you need first."); return; }
@@ -775,7 +839,7 @@ async function runGenerate() {
     const iac = document.getElementById("existingIacInput").value.trim();
     const pipeline = document.getElementById("existingPipelineInput").value.trim();
     const context = document.getElementById("existingContextInput").value.trim();
-    if (!iac && !pipeline) { showError("Paste at least one existing file (IaC or pipeline)."); return; }
+    if (!iac && !pipeline) { showError("Paste or upload at least one existing file (IaC or pipeline)."); return; }
     payload.existingIac = iac;
     payload.existingPipeline = pipeline;
     payload.request = context;
@@ -787,43 +851,49 @@ async function runGenerate() {
     payload.environments = Array.from(checkedEnvs);
   }
 
-  const btn = document.getElementById("genBtn");
-  btn.disabled = true;
-  document.getElementById("statusRow").style.display = "flex";
-  document.getElementById("statusText").textContent = isSolution ? "Generating full solution\u2026 (can take a few minutes)" : "Generating\u2026";
+  const controller = new AbortController();
+  currentAbortController = controller;
+  setGeneratingUi(true, isSolution ? "Generating full solution… (can take a few minutes)" : "Generating…");
 
   try {
     const res = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     });
     const result = await res.json();
     if (!res.ok) {
       throw new Error(result.message || "Generation failed");
     }
-    if (isSolution) {
-      renderSolutionResult(result, proj);
-    } else {
-      renderResult(result, proj);
-    }
-    showResults();
+    renderResults(result, activeMode);
+    showResultsPanel();
   } catch (e) {
-    console.error(e);
-    showError("Generation failed: " + (e && e.message ? e.message : "unknown error") + ". Try again, or simplify the input.");
+    if (e && e.name === "AbortError") {
+      showNotice("Generation stopped.");
+    } else {
+      console.error(e);
+      showError("Generation failed: " + (e && e.message ? e.message : "unknown error") + ". Try again, or simplify the input.");
+    }
   } finally {
-    btn.disabled = false;
-    document.getElementById("statusRow").style.display = "none";
+    currentAbortController = null;
+    setGeneratingUi(false);
   }
 }
 
+function stopGenerate() {
+  if (currentAbortController) currentAbortController.abort();
+}
+
 function init() {
-  renderProjRow();
+  renderAllChoiceRows();
   renderExamples();
   renderEnvChecks();
   renderSolutionExamples();
   initUploadZone();
   document.getElementById("genBtn").addEventListener("click", runGenerate);
+  document.getElementById("stopBtn").addEventListener("click", stopGenerate);
+  document.getElementById("downloadBtn").addEventListener("click", downloadBundle);
   document.getElementById("modeNewBtn").addEventListener("click", () => setMode("new"));
   document.getElementById("modeExistingBtn").addEventListener("click", () => setMode("existing"));
   document.getElementById("modeSolutionBtn").addEventListener("click", () => setMode("solution"));

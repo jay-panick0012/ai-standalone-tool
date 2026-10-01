@@ -1,11 +1,21 @@
 # AI Pipeline & Environment Generator — standalone
 
-A small, self-hosted version of the generator tool. It runs as one Docker
-container: a static frontend plus a lightweight Node/Express backend that
-calls the Anthropic API directly. No claude.ai dependency, no repo access
-to the target project needed — everything comes in through paste-in fields.
+A small, self-hosted, **generic** pipeline & environment generator. It runs
+as one Docker container: a static frontend plus a lightweight Node/Express
+backend that calls the Anthropic API directly. No claude.ai dependency, no
+repo access to any target project needed, and no hardcoded client/project
+list — every generation is parameterized by the cloud provider, IaC tool,
+and pipeline tool you pick at the top of the page:
 
-Three modes:
+- **Cloud provider**: AWS, Azure, GCP, or Other/multi-cloud
+- **IaC tool**: Terraform, Bicep, CloudFormation, ARM Templates, Pulumi,
+  AWS CDK, OpenTofu, Ansible
+- **Pipeline tool**: GitHub Actions, Azure DevOps, Jenkins, GitLab CI/CD,
+  Harness, CircleCI, Bitbucket Pipelines, AWS CodePipeline
+
+These selectors apply across all three modes below (switching modes doesn't
+reset them):
+
 - **Generate from scratch** — describe an environment/pipeline in plain English,
   get back one IaC snippet and one pipeline snippet.
 - **Review & improve existing code** — paste an existing (redacted) pipeline
@@ -18,29 +28,34 @@ Three modes:
   and similar secret/state files are filtered out automatically, and
   build/vendor directories (`node_modules`, `.git`, `dist`, etc.) are
   skipped. Review the populated fields before generating — nothing is sent
-  to the backend until you click Generate. Use this when testing against a
-  real project's files.
+  to the backend until you click Generate.
 - **Full solution bundle** — describe an end-to-end need (e.g. "onboard a new
   client across dev/qa/staging/prod") and get back a *complete* file set:
   environment-separated IaC, a full multi-stage pipeline with security gates,
-  and a README explaining how to adopt it — downloadable as a single .zip.
-  This is the "end-to-end" mode: it hands back a full solution to review and
-  drop into a repo, not a fragment to build the rest around.
+  and a README explaining how to adopt it.
 
-  There's also a disabled "Push to Git" button next to the download button.
-  It's intentionally not wired up yet — it needs real repo credentials
-  (a PAT or GitHub App / Azure DevOps service connection) per project, which
-  don't exist under the current access model. `/api/push-to-git` on the
-  backend returns a clear 501 explaining why, and is where that integration
-  plugs in later without touching the generation logic — it would reuse the
-  same `files` array `/api/generate-solution` already produces, just commit
-  it to a new branch and open a PR instead of zipping it.
+All three modes share one results panel (impact summary, explanation, issues
+found, file manifest, and a tabbed code/file viewer in a single card instead
+of scattered boxes), a **Stop generating** button that cancels the in-flight
+request — and the upstream call to Anthropic is aborted server-side too, so
+clicking Stop doesn't just hide the wait, it actually stops burning tokens —
+and a **Download** control that bundles whatever was generated as a `.zip`
+or `.tar`, your choice.
+
+There's also a disabled "Push to Git" button next to the download button.
+It's intentionally not wired up yet — it needs real repo credentials
+(a PAT or GitHub App / Azure DevOps service connection) per target repo,
+which don't exist under the current access model. `/api/push-to-git` on the
+backend returns a clear 501 explaining why, and is where that integration
+plugs in later without touching the generation logic — it would reuse the
+same `files` array `/api/generate-solution` already produces, just commit
+it to a new branch and open a PR instead of zipping it.
 
 ## Before you paste anything in
 
 Redact account IDs, subscription IDs, hostnames, internal IPs, and —
-critically — never paste real secret values or credentials, even for a
-project whose pain point *is* secrets in the repo. Use obvious placeholders
+critically — never paste real secret values or credentials, even when the
+whole point is to fix secrets being in the repo. Use obvious placeholders
 (`ACCOUNT_ID`, `<SUBSCRIPTION_ID>`, `REDACTED`) instead.
 
 ## 1. Get an Anthropic API key
@@ -118,16 +133,16 @@ run in Experion's own cloud ops account for internal testing, or be hosted
 inside the client's subscription/account if they'd rather it stay on their
 side, without any code changes.
 
-## 4. What it needs from each project team
+## 4. What it needs from a project team to try "review & improve"
 
 Nothing ongoing. One-time ask per project:
-- One existing pipeline file (YAML), redacted
-- One existing IaC file if any exists (Terraform/Bicep/CloudFormation), redacted
+- One existing pipeline file, redacted
+- One existing IaC file if any exists, redacted (or a `.zip` of the repo/folder)
 - A sentence or two on what's slow or painful about it today
 
 That's enough to run the "review & improve" mode and show a credible
 before/after without needing repo access, CI integration, or their time
-beyond sending two files.
+beyond sending a couple of files.
 
 ## Notes on cost and safety
 

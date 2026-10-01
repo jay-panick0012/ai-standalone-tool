@@ -26,16 +26,20 @@ if (!API_KEY) {
   );
 }
 
-const PROJECTS = {
-  stellantis: { name: "Stellantis (F2MC)", cloud: "AWS", iacTool: "CloudFormation", pipelineTool: "Azure DevOps YAML" },
-  tvh: { name: "True Value Hub", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
-  "hd-dms": { name: "Harley Davidson DMS", cloud: "Azure", iacTool: "Bicep", pipelineTool: "Azure DevOps YAML" },
-};
+function validateStackFields(body) {
+  const cloud = (body.cloud || "").trim();
+  const iacTool = (body.iacTool || "").trim();
+  const pipelineTool = (body.pipelineTool || "").trim();
+  if (!cloud || !iacTool || !pipelineTool) {
+    return { error: "Select a cloud provider, IaC tool, and pipeline tool." };
+  }
+  return { cloud, iacTool, pipelineTool };
+}
 
-function buildPrompt({ project, userReq, existingIac, existingPipeline }) {
+function buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, existingPipeline }) {
   const hasExisting = Boolean((existingIac && existingIac.trim()) || (existingPipeline && existingPipeline.trim()));
 
-  const header = `You are an AI DevOps engineer helping modernize a real project. Project: "${project.name}" on ${project.cloud}. Infrastructure-as-code tool in use: ${project.iacTool}. Pipeline tool in use: ${project.pipelineTool}.`;
+  const header = `You are an AI DevOps engineer helping design and improve cloud infrastructure and CI/CD pipelines. Target cloud: ${cloud}. Infrastructure-as-code tool: ${iacTool}. Pipeline tool: ${pipelineTool}.`;
 
   const requestBlock = `Request:\n"""\n${userReq || "(no specific request given — assess and improve the existing code below)"}\n"""`;
 
@@ -47,14 +51,14 @@ function buildPrompt({ project, userReq, existingIac, existingPipeline }) {
     ? `Produce:
 1. A 2-3 sentence plain-English explanation for a non-technical audience of what's wrong with the existing code and what you changed.
 2. A list "existing_code_issues": 3-6 short, specific issues found in the existing code (maturity gaps: hardcoded values, no environment separation, missing security scanning, no remote state, etc.)
-3. An improved ${project.iacTool} snippet that fixes those issues while preserving the original intent (use placeholders for anything account/environment-specific; keep it focused, not exhaustive boilerplate).
-4. An improved ${project.pipelineTool} snippet, adding a security scanning gate (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets — whichever are relevant) and environment promotion stages if missing.
+3. An improved ${iacTool} snippet that fixes those issues while preserving the original intent (use placeholders for anything account/environment-specific; keep it focused, not exhaustive boilerplate).
+4. An improved ${pipelineTool} snippet, adding a security scanning gate (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets — whichever are relevant) and environment promotion stages if missing.
 5. "manual_effort_today": a realistic, conservative one-line estimate of how long a DevOps engineer would take to make these improvements by hand.
 6. "with_ai_estimate": a realistic one-line estimate of how long it takes with this generation approach plus human review.`
     : `Produce:
 1. A 2-3 sentence plain-English explanation of what you generated and why, for a non-technical audience.
-2. A realistic ${project.iacTool} snippet implementing the request (placeholders for account/environment-specific values; brief comments; focused, not exhaustive boilerplate).
-3. A realistic ${project.pipelineTool} snippet implementing a CI/CD pipeline appropriate to the request, including a security scanning gate and environment promotion stages if relevant.
+2. A realistic ${iacTool} snippet implementing the request (placeholders for account/environment-specific values; brief comments; focused, not exhaustive boilerplate).
+3. A realistic ${pipelineTool} snippet implementing a CI/CD pipeline appropriate to the request, including a security scanning gate and environment promotion stages if relevant.
 4. "manual_effort_today": a realistic, conservative one-line estimate of how long a DevOps engineer would take to hand-write and test this.
 5. "with_ai_estimate": a realistic one-line estimate of how long it takes with this generation approach plus human review.`;
 
@@ -93,8 +97,11 @@ function extractErrorDetail(errText) {
 
 // Streams the response instead of waiting for one large buffered reply —
 // a full solution bundle (many files + README) can take minutes and enough
-// output tokens to risk the plain fetch() call itself timing out.
-async function callAnthropicStreaming({ maxTokens, prompt }) {
+// output tokens to risk the plain fetch() call itself timing out. `signal`
+// is forwarded from the originating Express request so that a client
+// disconnect (e.g. the UI's Stop button aborting its fetch) also aborts
+// this upstream call instead of burning tokens on an abandoned generation.
+async function callAnthropicStreaming({ maxTokens, prompt, signal }) {
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -108,6 +115,7 @@ async function callAnthropicStreaming({ maxTokens, prompt }) {
       stream: true,
       messages: [{ role: "user", content: prompt }],
     }),
+    signal,
   });
 
   if (!upstream.ok) {
@@ -220,26 +228,36 @@ function parseModelJson(raw) {
 }
 
 app.post("/api/generate", async (req, res) => {
+  res.on("error", () => {}); // swallow write errors on an already-closed (aborted) connection
+  const upstreamController = new AbortController();
+  req.on("close", () => upstreamController.abort());
+
   try {
     if (!API_KEY) {
       return res.status(500).json({ error: "server_not_configured", message: "ANTHROPIC_API_KEY is not set on the server." });
     }
 
-    const { projectId, request: userReq, existingIac, existingPipeline } = req.body || {};
-    const project = PROJECTS[projectId];
-    if (!project) {
-      return res.status(400).json({ error: "bad_request", message: "Unknown projectId." });
+    const body = req.body || {};
+    const stack = validateStackFields(body);
+    if (stack.error) {
+      return res.status(400).json({ error: "bad_request", message: stack.error });
     }
+    const { cloud, iacTool, pipelineTool } = stack;
+    const { request: userReq, existingIac, existingPipeline } = body;
     if (!userReq && !existingIac && !existingPipeline) {
       return res.status(400).json({ error: "bad_request", message: "Provide a request, existing IaC, or existing pipeline." });
     }
 
-    const prompt = buildPrompt({ project, userReq, existingIac, existingPipeline });
+    const prompt = buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, existingPipeline });
 
     let raw, stopReason;
     try {
-      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 16000, prompt }));
+      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 16000, prompt, signal: upstreamController.signal }));
     } catch (err) {
+      if (err.name === "AbortError" || upstreamController.signal.aborted) {
+        console.log("Generation aborted (client disconnected or clicked Stop).");
+        return;
+      }
       console.error("Anthropic API error:", err.status, err.message);
       const detail = extractErrorDetail(err.message);
       return res.status(502).json({
@@ -276,19 +294,19 @@ app.post("/api/generate", async (req, res) => {
   }
 });
 
-function buildSolutionPrompt({ project, userReq, environments }) {
+function buildSolutionPrompt({ cloud, iacTool, pipelineTool, userReq, environments }) {
   const envList = (environments && environments.length ? environments : ["dev", "qa", "staging", "prod"]).join(", ");
 
   return `You are an AI DevOps engineer producing a COMPLETE, end-to-end DevOps solution package for a real request — not a single snippet, but the full set of files a team would need to adopt this.
 
-Project: "${project.name}" on ${project.cloud}. Infrastructure-as-code tool: ${project.iacTool}. Pipeline tool: ${project.pipelineTool}. Target environments: ${envList}.
+Target cloud: ${cloud}. Infrastructure-as-code tool: ${iacTool}. Pipeline tool: ${pipelineTool}. Target environments: ${envList}.
 
 Request:
 """
 ${userReq}
 """
 
-Produce a complete solution: environment-separated IaC (one set of files per environment or a modular structure with per-environment tfvars/parameters — your judgment on which fits ${project.iacTool} best), a full multi-stage pipeline covering all listed environments with approval gates between them, a security scanning gate appropriate to the stack (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets), and a README explaining what was generated, how to adopt it, and what to check before applying it.
+Produce a complete solution: environment-separated IaC (one set of files per environment or a modular structure with per-environment tfvars/parameters — your judgment on which fits ${iacTool} best), a full multi-stage pipeline covering all listed environments with approval gates between them, a security scanning gate appropriate to the stack (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets), and a README explaining what was generated, how to adopt it, and what to check before applying it.
 
 Use placeholders (ACCOUNT_ID, <SUBSCRIPTION_ID>, etc.) for anything account/environment-specific. Keep each file realistic and focused — this should look like something a competent engineer wrote, not exhaustive generated boilerplate.
 
@@ -304,26 +322,36 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
 }
 
 app.post("/api/generate-solution", async (req, res) => {
+  res.on("error", () => {}); // swallow write errors on an already-closed (aborted) connection
+  const upstreamController = new AbortController();
+  req.on("close", () => upstreamController.abort());
+
   try {
     if (!API_KEY) {
       return res.status(500).json({ error: "server_not_configured", message: "ANTHROPIC_API_KEY is not set on the server." });
     }
 
-    const { projectId, request: userReq, environments } = req.body || {};
-    const project = PROJECTS[projectId];
-    if (!project) {
-      return res.status(400).json({ error: "bad_request", message: "Unknown projectId." });
+    const body = req.body || {};
+    const stack = validateStackFields(body);
+    if (stack.error) {
+      return res.status(400).json({ error: "bad_request", message: stack.error });
     }
+    const { cloud, iacTool, pipelineTool } = stack;
+    const { request: userReq, environments } = body;
     if (!userReq) {
       return res.status(400).json({ error: "bad_request", message: "Describe the solution you need." });
     }
 
-    const prompt = buildSolutionPrompt({ project, userReq, environments });
+    const prompt = buildSolutionPrompt({ cloud, iacTool, pipelineTool, userReq, environments });
 
     let raw, stopReason;
     try {
-      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 64000, prompt }));
+      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 64000, prompt, signal: upstreamController.signal }));
     } catch (err) {
+      if (err.name === "AbortError" || upstreamController.signal.aborted) {
+        console.log("Generation aborted (client disconnected or clicked Stop).");
+        return;
+      }
       console.error("Anthropic API error:", err.status, err.message);
       const detail = extractErrorDetail(err.message);
       return res.status(502).json({
