@@ -24,15 +24,6 @@
     --mono: 'JetBrains Mono', monospace;
     --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #0D1420; --surface: #141D2B; --surface-2: #1B2634;
-      --border: #263449; --border-soft: #1E2A3A;
-      --text: #E7EDF4; --muted: #8B98A8; --muted-2: #5E6B7C;
-      --accent-dim: #1B4A45;
-      --accent-text: #2DD4BF; --warn-text: #F5A524; --danger-text: #F76A6A; --good-text: #4ADE80;
-    }
-  }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; line-height: 1.5; }
@@ -410,7 +401,8 @@ function renderChoiceRow(containerId, options, getActive, onPick) {
     const isActive = opt === getActive();
     const chip = document.createElement("div");
     chip.className = "choice-chip" + (isActive ? " active" : "");
-    chip.textContent = opt;
+    chip.textContent = isActive ? opt + "  ✕" : opt;
+    if (isActive) chip.title = "Click to deselect";
     // Clicking the already-selected chip clears it back to "none" — these
     // choices are optional hints, not required fields; left unselected,
     // the backend tells the model to infer from the request/existing code.
