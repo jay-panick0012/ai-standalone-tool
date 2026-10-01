@@ -26,20 +26,27 @@ if (!API_KEY) {
   );
 }
 
-function validateStackFields(body) {
-  const cloud = (body.cloud || "").trim();
-  const iacTool = (body.iacTool || "").trim();
-  const pipelineTool = (body.pipelineTool || "").trim();
-  if (!cloud || !iacTool || !pipelineTool) {
-    return { error: "Select a cloud provider, IaC tool, and pipeline tool." };
-  }
-  return { cloud, iacTool, pipelineTool };
+// Cloud/IaC/pipeline-tool selection is optional — the UI lets these be left
+// unset so the model can infer the best fit from the request or existing
+// code instead of being forced into a specific stack.
+function normalizeStackFields(body) {
+  return {
+    cloud: (body.cloud || "").trim(),
+    iacTool: (body.iacTool || "").trim(),
+    pipelineTool: (body.pipelineTool || "").trim(),
+  };
+}
+
+function describeStackChoice(label, value) {
+  return value
+    ? `${label}: ${value}.`
+    : `${label}: not specified — infer the most sensible choice from the request/existing code and state that assumption in the explanation.`;
 }
 
 function buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, existingPipeline }) {
   const hasExisting = Boolean((existingIac && existingIac.trim()) || (existingPipeline && existingPipeline.trim()));
 
-  const header = `You are an AI DevOps engineer helping design and improve cloud infrastructure and CI/CD pipelines. Target cloud: ${cloud}. Infrastructure-as-code tool: ${iacTool}. Pipeline tool: ${pipelineTool}.`;
+  const header = `You are an AI DevOps engineer helping design and improve cloud infrastructure and CI/CD pipelines. ${describeStackChoice("Target cloud", cloud)} ${describeStackChoice("Infrastructure-as-code tool", iacTool)} ${describeStackChoice("Pipeline tool", pipelineTool)}`;
 
   const requestBlock = `Request:\n"""\n${userReq || "(no specific request given — assess and improve the existing code below)"}\n"""`;
 
@@ -47,7 +54,8 @@ function buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, exist
     ? `\nExisting code provided by the team (redacted of any real identifiers/secrets — treat placeholders like ACCOUNT_ID, <SUBSCRIPTION>, etc. as intentional):\n\n--- EXISTING IAC ---\n${existingIac || "(none provided)"}\n\n--- EXISTING PIPELINE ---\n${existingPipeline || "(none provided)"}\n`
     : "";
 
-  const folderGuidance = `Lay the output out in the folder structure a competent platform team would actually adopt for ${iacTool} + ${pipelineTool} — do not return one flat snippet. As a guide (adapt to what actually fits ${iacTool}/${pipelineTool}, this is not a rigid template):
+  const stackLabel = [iacTool, pipelineTool].filter(Boolean).join(" + ") || "whichever IaC and pipeline tool you infer fits best";
+  const folderGuidance = `Lay the output out in the folder structure a competent platform team would actually adopt for ${stackLabel} — do not return one flat snippet. As a guide (adapt to what actually fits the tooling, this is not a rigid template):
 - IaC: reusable building blocks under modules/ (or the tool's equivalent), with a thin per-environment entrypoint under environments/<env>/ (or per-environment .tfvars/.bicepparam/parameter files) that calls those modules — not one giant file repeating itself per environment.
 - Pipeline: the pipeline tool's idiomatic file location (e.g. .github/workflows/*.yml for GitHub Actions, azure-pipelines.yml at the repo root plus templates/ for reusable stages on Azure DevOps, Jenkinsfile at the root plus a shared vars/ library for Jenkins, .gitlab-ci.yml plus include: files for GitLab CI/CD).
 Even if the existing code was a single flat file, restructure it into this layout as part of the improvement.`;
@@ -239,11 +247,7 @@ app.post("/api/generate", async (req, res) => {
     }
 
     const body = req.body || {};
-    const stack = validateStackFields(body);
-    if (stack.error) {
-      return res.status(400).json({ error: "bad_request", message: stack.error });
-    }
-    const { cloud, iacTool, pipelineTool } = stack;
+    const { cloud, iacTool, pipelineTool } = normalizeStackFields(body);
     const { request: userReq, existingIac, existingPipeline } = body;
     if (!userReq && !existingIac && !existingPipeline) {
       return res.status(400).json({ error: "bad_request", message: "Provide a request, existing IaC, or existing pipeline." });
@@ -300,16 +304,17 @@ app.post("/api/generate", async (req, res) => {
 function buildSolutionPrompt({ cloud, iacTool, pipelineTool, userReq, environments }) {
   const envList = (environments && environments.length ? environments : ["dev", "qa", "staging", "prod"]).join(", ");
 
+  const iacLabel = iacTool || "the IaC tool you judge fits best";
   return `You are an AI DevOps engineer producing a COMPLETE, end-to-end DevOps solution package for a real request — not a single snippet, but the full set of files a team would need to adopt this.
 
-Target cloud: ${cloud}. Infrastructure-as-code tool: ${iacTool}. Pipeline tool: ${pipelineTool}. Target environments: ${envList}.
+${describeStackChoice("Target cloud", cloud)} ${describeStackChoice("Infrastructure-as-code tool", iacTool)} ${describeStackChoice("Pipeline tool", pipelineTool)} Target environments: ${envList}.
 
 Request:
 """
 ${userReq}
 """
 
-Produce a complete solution: environment-separated IaC (one set of files per environment or a modular structure with per-environment tfvars/parameters — your judgment on which fits ${iacTool} best), a full multi-stage pipeline covering all listed environments with approval gates between them, a security scanning gate appropriate to the stack (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets), and a README explaining what was generated, how to adopt it, and what to check before applying it.
+Produce a complete solution: environment-separated IaC (one set of files per environment or a modular structure with per-environment tfvars/parameters — your judgment on which fits ${iacLabel} best), a full multi-stage pipeline covering all listed environments with approval gates between them, a security scanning gate appropriate to the stack (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets), and a README explaining what was generated, how to adopt it, and what to check before applying it.
 
 Use placeholders (ACCOUNT_ID, <SUBSCRIPTION_ID>, etc.) for anything account/environment-specific. Keep each file realistic and focused — this should look like something a competent engineer wrote, not exhaustive generated boilerplate.
 
@@ -335,11 +340,7 @@ app.post("/api/generate-solution", async (req, res) => {
     }
 
     const body = req.body || {};
-    const stack = validateStackFields(body);
-    if (stack.error) {
-      return res.status(400).json({ error: "bad_request", message: stack.error });
-    }
-    const { cloud, iacTool, pipelineTool } = stack;
+    const { cloud, iacTool, pipelineTool } = normalizeStackFields(body);
     const { request: userReq, environments } = body;
     if (!userReq) {
       return res.status(400).json({ error: "bad_request", message: "Describe the solution you need." });

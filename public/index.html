@@ -250,6 +250,7 @@
 
     <h3 class="sub">Pipeline tool</h3>
     <div class="choice-row" id="pipelineRow"></div>
+    <p class="field-hint">Optional — click a selected option again to clear it. Left unselected, the AI infers the best fit from your request or existing code.</p>
 
     <h3 class="sub">Mode</h3>
     <div class="mode-toggle">
@@ -406,10 +407,14 @@ function renderChoiceRow(containerId, options, getActive, onPick) {
   const el = document.getElementById(containerId);
   el.innerHTML = "";
   options.forEach(opt => {
+    const isActive = opt === getActive();
     const chip = document.createElement("div");
-    chip.className = "choice-chip" + (opt === getActive() ? " active" : "");
+    chip.className = "choice-chip" + (isActive ? " active" : "");
     chip.textContent = opt;
-    chip.onclick = () => { onPick(opt); renderAllChoiceRows(); };
+    // Clicking the already-selected chip clears it back to "none" — these
+    // choices are optional hints, not required fields; left unselected,
+    // the backend tells the model to infer from the request/existing code.
+    chip.onclick = () => { onPick(isActive ? null : opt); renderAllChoiceRows(); };
     el.appendChild(chip);
   });
 }
@@ -420,10 +425,14 @@ function renderAllChoiceRows() {
   renderChoiceRow("pipelineRow", PIPELINE_TOOLS, () => activePipeline, (v) => { activePipeline = v; });
 }
 
+function examplesForCloud(source) {
+  return (activeCloud && source[activeCloud]) ? source[activeCloud] : (source["Other / multi-cloud"] || []);
+}
+
 function renderExamples() {
   const el = document.getElementById("examplesRow");
   el.innerHTML = "";
-  (EXAMPLES[activeCloud] || []).forEach(ex => {
+  examplesForCloud(EXAMPLES).forEach(ex => {
     const chip = document.createElement("div");
     chip.className = "example-chip";
     chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
@@ -436,7 +445,7 @@ function renderExamples() {
 function renderSolutionExamples() {
   const el = document.getElementById("solutionExamplesRow");
   el.innerHTML = "";
-  (SOLUTION_EXAMPLES[activeCloud] || []).forEach(ex => {
+  examplesForCloud(SOLUTION_EXAMPLES).forEach(ex => {
     const chip = document.createElement("div");
     chip.className = "example-chip";
     chip.textContent = ex.length > 70 ? ex.slice(0, 68) + "…" : ex;
