@@ -866,8 +866,13 @@ async function runGenerate() {
       body: JSON.stringify(payload),
       signal: controller.signal,
     });
-    const result = await res.json();
-    if (!res.ok) {
+    // The server streams whitespace keepalives (status is already 200), so
+    // errors arrive as a JSON body with an "error" field rather than a status.
+    const text = await res.text();
+    let result;
+    try { result = JSON.parse(text); }
+    catch { throw new Error(res.ok ? "The server returned an unreadable response" : text.slice(0, 200) || "Generation failed"); }
+    if (!res.ok || result.error) {
       throw new Error(result.message || "Generation failed");
     }
     renderResults(result, activeMode);

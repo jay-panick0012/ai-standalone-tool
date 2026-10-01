@@ -139,6 +139,9 @@ async function callAnthropicStreaming({ maxTokens, prompt, signal }) {
   const decoder = new TextDecoder();
   let buffer = "";
 
+  const t0 = Date.now();
+  const progress = setInterval(() => console.log(`[gen] ${Math.round((Date.now() - t0) / 1000)}s, ${text.length} chars received`), 15000);
+  try {
   for await (const chunk of upstream.body) {
     buffer += decoder.decode(chunk, { stream: true });
     const lines = buffer.split("\n");
@@ -161,6 +164,8 @@ async function callAnthropicStreaming({ maxTokens, prompt, signal }) {
     }
   }
 
+  } finally { clearInterval(progress); }
+  console.log(`[gen] done in ${Math.round((Date.now() - t0) / 1000)}s, ${text.length} chars, stop=${stopReason}`);
   return { text, stopReason };
 }
 
@@ -236,10 +241,25 @@ function parseModelJson(raw) {
   throw new Error("No JSON object found in model output");
 }
 
+// Long generations produce no response bytes until the model finishes, and
+// proxies such as Azure Container Apps ingress cut idle responses (~4 min) with
+// a plain-text "stream timeout". Commit to a 200 JSON response up front and
+// send whitespace (valid before a JSON value) as keepalive. Because the status
+// is already sent, res.json() is overridden to deliver the body as-is; error
+// bodies carry an "error" field, which the client checks.
+function startKeepalive(res) {
+  res.status(200).type("application/json");
+  res.flushHeaders();
+  const timer = setInterval(() => res.write(" "), 15000);
+  const stop = () => clearInterval(timer);
+  res.on("close", stop);
+  res.json = (obj) => { stop(); res.end(JSON.stringify(obj)); return res; };
+}
+
 app.post("/api/generate", async (req, res) => {
   res.on("error", () => {}); // swallow write errors on an already-closed (aborted) connection
   const upstreamController = new AbortController();
-  req.on("close", () => upstreamController.abort());
+  res.on("close", () => { if (!res.writableEnded) upstreamController.abort(); }); // not req "close": on Node 16+ that fires as soon as the body is read
 
   try {
     if (!API_KEY) {
@@ -255,6 +275,7 @@ app.post("/api/generate", async (req, res) => {
 
     const prompt = buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, existingPipeline });
 
+    startKeepalive(res);
     let raw, stopReason;
     try {
       // Bumped from 16000: a restructured multi-file folder layout needs more
@@ -332,7 +353,7 @@ Respond with ONLY valid JSON, no markdown fences, no commentary, matching exactl
 app.post("/api/generate-solution", async (req, res) => {
   res.on("error", () => {}); // swallow write errors on an already-closed (aborted) connection
   const upstreamController = new AbortController();
-  req.on("close", () => upstreamController.abort());
+  res.on("close", () => { if (!res.writableEnded) upstreamController.abort(); }); // not req "close": on Node 16+ that fires as soon as the body is read
 
   try {
     if (!API_KEY) {
@@ -348,6 +369,7 @@ app.post("/api/generate-solution", async (req, res) => {
 
     const prompt = buildSolutionPrompt({ cloud, iacTool, pipelineTool, userReq, environments });
 
+    startKeepalive(res);
     let raw, stopReason;
     try {
       ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 64000, prompt, signal: upstreamController.signal }));
