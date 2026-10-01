@@ -47,18 +47,23 @@ function buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, exist
     ? `\nExisting code provided by the team (redacted of any real identifiers/secrets — treat placeholders like ACCOUNT_ID, <SUBSCRIPTION>, etc. as intentional):\n\n--- EXISTING IAC ---\n${existingIac || "(none provided)"}\n\n--- EXISTING PIPELINE ---\n${existingPipeline || "(none provided)"}\n`
     : "";
 
+  const folderGuidance = `Lay the output out in the folder structure a competent platform team would actually adopt for ${iacTool} + ${pipelineTool} — do not return one flat snippet. As a guide (adapt to what actually fits ${iacTool}/${pipelineTool}, this is not a rigid template):
+- IaC: reusable building blocks under modules/ (or the tool's equivalent), with a thin per-environment entrypoint under environments/<env>/ (or per-environment .tfvars/.bicepparam/parameter files) that calls those modules — not one giant file repeating itself per environment.
+- Pipeline: the pipeline tool's idiomatic file location (e.g. .github/workflows/*.yml for GitHub Actions, azure-pipelines.yml at the repo root plus templates/ for reusable stages on Azure DevOps, Jenkinsfile at the root plus a shared vars/ library for Jenkins, .gitlab-ci.yml plus include: files for GitLab CI/CD).
+Even if the existing code was a single flat file, restructure it into this layout as part of the improvement.`;
+
   const taskWithExisting = hasExisting
     ? `Produce:
 1. A 2-3 sentence plain-English explanation for a non-technical audience of what's wrong with the existing code and what you changed.
 2. A list "existing_code_issues": 3-6 short, specific issues found in the existing code (maturity gaps: hardcoded values, no environment separation, missing security scanning, no remote state, etc.)
-3. An improved ${iacTool} snippet that fixes those issues while preserving the original intent (use placeholders for anything account/environment-specific; keep it focused, not exhaustive boilerplate).
-4. An improved ${pipelineTool} snippet, adding a security scanning gate (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets — whichever are relevant) and environment promotion stages if missing.
+3. An improved, restructured set of files that fixes those issues while preserving the original intent (use placeholders for anything account/environment-specific; keep each file focused, not exhaustive boilerplate). ${folderGuidance}
+4. Within that pipeline file set, add a security scanning gate (Checkov/tfsec for IaC, Trivy for containers, gitleaks for secrets — whichever are relevant) and environment promotion stages if missing.
 5. "manual_effort_today": a realistic, conservative one-line estimate of how long a DevOps engineer would take to make these improvements by hand.
 6. "with_ai_estimate": a realistic one-line estimate of how long it takes with this generation approach plus human review.`
     : `Produce:
 1. A 2-3 sentence plain-English explanation of what you generated and why, for a non-technical audience.
-2. A realistic ${iacTool} snippet implementing the request (placeholders for account/environment-specific values; brief comments; focused, not exhaustive boilerplate).
-3. A realistic ${pipelineTool} snippet implementing a CI/CD pipeline appropriate to the request, including a security scanning gate and environment promotion stages if relevant.
+2. A realistic set of files implementing the request (placeholders for account/environment-specific values; brief comments; each file focused, not exhaustive boilerplate). ${folderGuidance}
+3. Within that pipeline file set, include a security scanning gate and environment promotion stages if relevant.
 4. "manual_effort_today": a realistic, conservative one-line estimate of how long a DevOps engineer would take to hand-write and test this.
 5. "with_ai_estimate": a realistic one-line estimate of how long it takes with this generation approach plus human review.`;
 
@@ -66,19 +71,15 @@ function buildPrompt({ cloud, iacTool, pipelineTool, userReq, existingIac, exist
     ? `{
   "explanation": "string",
   "existing_code_issues": ["string"],
-  "iac_filename": "string",
-  "iac_code": "string (the improved code, no markdown fences inside)",
-  "pipeline_filename": "string",
-  "pipeline_code": "string (the improved code, no markdown fences inside)",
+  "manifest": [{"path": "string - file path reflecting the folder structure described above", "purpose": "string - one line on what this file does"}],
+  "files": [{"path": "string - same paths as manifest", "content": "string (the improved code, no markdown fences inside)"}],
   "manual_effort_today": "string",
   "with_ai_estimate": "string"
 }`
     : `{
   "explanation": "string",
-  "iac_filename": "string",
-  "iac_code": "string (the raw code, no markdown fences inside)",
-  "pipeline_filename": "string",
-  "pipeline_code": "string (the raw code, no markdown fences inside)",
+  "manifest": [{"path": "string - file path reflecting the folder structure described above", "purpose": "string - one line on what this file does"}],
+  "files": [{"path": "string - same paths as manifest", "content": "string (the raw code, no markdown fences inside)"}],
   "manual_effort_today": "string",
   "with_ai_estimate": "string"
 }`;
@@ -252,7 +253,9 @@ app.post("/api/generate", async (req, res) => {
 
     let raw, stopReason;
     try {
-      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 16000, prompt, signal: upstreamController.signal }));
+      // Bumped from 16000: a restructured multi-file folder layout needs more
+      // room than the old single IaC + single pipeline snippet did.
+      ({ text: raw, stopReason } = await callAnthropicStreaming({ maxTokens: 28000, prompt, signal: upstreamController.signal }));
     } catch (err) {
       if (err.name === "AbortError" || upstreamController.signal.aborted) {
         console.log("Generation aborted (client disconnected or clicked Stop).");

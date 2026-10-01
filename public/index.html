@@ -10,20 +10,27 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
-    --bg: #0D1420; --surface: #141D2B; --surface-2: #1B2634;
-    --border: #263449; --border-soft: #1E2A3A;
-    --text: #E7EDF4; --muted: #8B98A8; --muted-2: #5E6B7C;
-    --accent: #2DD4BF; --accent-dim: #1B4A45;
+    /* Light theme by default — readable on its own, not gated behind OS preference. */
+    --bg: #F7F9FC; --surface: #FFFFFF; --surface-2: #F1F4F8;
+    --border: #D8DEE6; --border-soft: #E4E8ED;
+    --text: #101826; --muted: #5B6675; --muted-2: #8C95A3;
+    --accent: #2DD4BF; --accent-dim: #D6F5F1;
     --warn: #F5A524; --danger: #F76A6A; --good: #4ADE80;
+    /* "-text" variants: same colors but darkened enough to pass contrast as
+       literal foreground text on a light surface (the bright versions above
+       are for backgrounds/borders/buttons, where contrast math is different). */
+    --accent-text: #0F766E; --warn-text: #B45309; --danger-text: #B91C1C; --good-text: #15803D;
     --radius: 10px;
     --mono: 'JetBrains Mono', monospace;
     --sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   }
-  @media (prefers-color-scheme: light) {
-    :root {
-      --bg: #F5F7FA; --surface: #FFFFFF; --surface-2: #EEF1F5;
-      --border: #D8DEE6; --border-soft: #E4E8ED; --text: #101826;
-      --muted: #5B6675; --muted-2: #8C95A3; --accent-dim: #D6F5F1;
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0D1420; --surface: #141D2B; --surface-2: #1B2634;
+      --border: #263449; --border-soft: #1E2A3A;
+      --text: #E7EDF4; --muted: #8B98A8; --muted-2: #5E6B7C;
+      --accent-dim: #1B4A45;
+      --accent-text: #2DD4BF; --warn-text: #F5A524; --danger-text: #F76A6A; --good-text: #4ADE80;
     }
   }
   * { box-sizing: border-box; }
@@ -34,7 +41,7 @@
   @media (max-width: 640px) { .wrap { padding: 20px 16px 50px; } }
 
   .head { margin-bottom: 22px; }
-  .head .eyebrow { font-family: var(--mono); font-size: 11.5px; color: var(--accent); margin-bottom: 8px; }
+  .head .eyebrow { font-family: var(--mono); font-size: 11.5px; color: var(--accent-text); margin-bottom: 8px; }
   .head h1 { font-size: 26px; margin: 0 0 6px; letter-spacing: -0.01em; }
   .head p { color: var(--muted); font-size: 14px; margin: 0; max-width: 680px; }
 
@@ -86,8 +93,8 @@
     font-family: var(--sans); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.03em;
     padding: 2px 6px; border-radius: 4px; font-weight: 700;
   }
-  .uploaded-file-chip .badge.iac { background: var(--accent-dim); color: var(--accent); }
-  .uploaded-file-chip .badge.pipeline { background: rgba(245,165,36,0.15); color: var(--warn); }
+  .uploaded-file-chip .badge.iac { background: var(--accent-dim); color: var(--accent-text); }
+  .uploaded-file-chip .badge.pipeline { background: rgba(245,165,36,0.15); color: var(--warn-text); }
   .uploaded-file-chip .badge.skipped { background: rgba(139,152,168,0.15); color: var(--muted); }
   .upload-clear-btn {
     font-size: 11.5px; color: var(--muted-2); background: none; border: none; cursor: pointer;
@@ -112,7 +119,7 @@
   button.primary:not(:disabled):hover { filter: brightness(1.08); }
 
   button.stop-btn {
-    background: transparent; color: var(--danger); border: 1px solid var(--danger); border-radius: 8px;
+    background: transparent; color: var(--danger-text); border: 1px solid var(--danger); border-radius: 8px;
     padding: 10px 18px; font-weight: 700; font-size: 13.5px; cursor: pointer; display: none;
   }
   button.stop-btn:hover { background: rgba(247,106,106,0.12); }
@@ -166,18 +173,18 @@
     border-radius: 8px; padding: 14px 16px;
   }
   .impact-card .k { font-family: var(--mono); font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; }
-  .impact-card .v { font-size: 15px; font-weight: 600; color: var(--accent); }
+  .impact-card .v { font-size: 15px; font-weight: 600; color: var(--accent-text); }
 
   .explain-text { font-size: 14px; }
 
   .issues-list { margin: 0; padding-left: 20px; font-size: 13.5px; }
-  .issues-list li { margin-bottom: 6px; color: #F0A5A5; }
+  .issues-list li { margin-bottom: 6px; color: var(--danger-text); }
 
   .manifest-row {
     display: flex; gap: 14px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px;
   }
   .manifest-row:last-child { border-bottom: none; }
-  .manifest-row .path { font-family: var(--mono); color: var(--accent); width: 320px; flex-shrink: 0; word-break: break-all; }
+  .manifest-row .path { font-family: var(--mono); color: var(--accent-text); width: 320px; flex-shrink: 0; word-break: break-all; }
   .manifest-row .purpose { color: var(--muted); }
 
   .code-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: -1px; }
@@ -186,7 +193,7 @@
     border-radius: 8px 8px 0 0; padding: 9px 16px; font-size: 12.5px; color: var(--muted);
     cursor: pointer; font-family: var(--mono);
   }
-  .code-tab.active { background: var(--surface); color: var(--accent); border-color: var(--accent); }
+  .code-tab.active { background: var(--surface); color: var(--accent-text); border-color: var(--accent); }
 
   .code-panel {
     display: none; background: var(--surface-2); border: 1px solid var(--border); border-radius: 0 10px 10px 10px;
@@ -203,7 +210,7 @@
     border-radius: 6px; padding: 5px 11px; font-size: 11.5px; cursor: pointer;
   }
   .copy-btn:hover { color: var(--text); border-color: var(--accent); }
-  .copy-btn.copied { color: var(--good); border-color: var(--good); }
+  .copy-btn.copied { color: var(--good-text); border-color: var(--good); }
   pre.code-block {
     margin: 0; padding: 16px 18px; overflow-x: auto; font-family: var(--mono); font-size: 12.5px;
     line-height: 1.6; color: var(--text); max-height: 520px; overflow-y: auto;
@@ -692,15 +699,9 @@ function triggerDownload(blob, filename) {
 
 function filesForCurrentResult() {
   if (!currentResult) return [];
-  if (currentMode === "solution") {
-    const files = [...(currentResult.files || [])];
-    if (currentResult.readme) files.push({ path: "README.md", content: currentResult.readme });
-    return files;
-  }
-  return [
-    { path: currentResult.iac_filename || "main.tf", content: currentResult.iac_code || "" },
-    { path: currentResult.pipeline_filename || "pipeline.yml", content: currentResult.pipeline_code || "" },
-  ];
+  const files = [...(currentResult.files || [])];
+  if (currentResult.readme) files.push({ path: "README.md", content: currentResult.readme });
+  return files;
 }
 
 async function downloadBundle() {
@@ -771,9 +772,8 @@ function renderResults(result, mode) {
     mode === "existing" ? "Review & improvement results" :
     "Generated environment & pipeline";
 
-  const thirdCard = mode === "solution"
-    ? `<div class="impact-card"><div class="k">Files generated</div><div class="v">${(result.files || []).length} files + README</div></div>`
-    : `<div class="impact-card"><div class="k">Target stack</div><div class="v">${escapeHtml(activeIac)} + ${escapeHtml(activePipeline)}</div></div>`;
+  const files = filesForCurrentResult();
+  const fileCountLabel = `${files.length} file${files.length === 1 ? "" : "s"}${result.readme ? " + README" : ""}`;
 
   document.getElementById("impactRow").innerHTML = `
     <div class="impact-card">
@@ -784,7 +784,10 @@ function renderResults(result, mode) {
       <div class="k">With AI generation</div>
       <div class="v">${escapeHtml(result.with_ai_estimate || "–")}</div>
     </div>
-    ${thirdCard}
+    <div class="impact-card">
+      <div class="k">Files generated</div>
+      <div class="v">${fileCountLabel}</div>
+    </div>
   `;
 
   document.getElementById("explainBox").textContent = result.explanation || "";
@@ -800,7 +803,7 @@ function renderResults(result, mode) {
 
   const manifestSection = document.getElementById("manifestSection");
   const manifestList = document.getElementById("manifestList");
-  if (mode === "solution" && result.manifest && result.manifest.length) {
+  if (result.manifest && result.manifest.length) {
     manifestList.innerHTML = result.manifest.map(m => `
       <div class="manifest-row">
         <div class="path">${escapeHtml(m.path)}</div>
@@ -812,7 +815,7 @@ function renderResults(result, mode) {
     manifestSection.style.display = "none";
   }
 
-  renderCodeTabs(filesForCurrentResult());
+  renderCodeTabs(files);
 }
 
 function setGeneratingUi(isGenerating, statusText) {

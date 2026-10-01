@@ -17,18 +17,25 @@ These selectors apply across all three modes below (switching modes doesn't
 reset them):
 
 - **Generate from scratch** — describe an environment/pipeline in plain English,
-  get back one IaC snippet and one pipeline snippet.
+  get back a proper multi-file layout (not one giant flat snippet): reusable
+  IaC modules under `modules/` with thin per-environment entrypoints under
+  `environments/<env>/`, and the pipeline file in that tool's idiomatic
+  location (`.github/workflows/`, `azure-pipelines.yml` + `templates/`,
+  `Jenkinsfile` + shared `vars/`, `.gitlab-ci.yml` + `include:` files, etc.) —
+  the folder structure a platform team would actually adopt, shown as a file
+  manifest plus a tabbed viewer.
 - **Review & improve existing code** — paste an existing (redacted) pipeline
   or IaC snippet, or upload it: a `.zip` of the repo/folder, or individual
   IaC/pipeline files (Terraform, Bicep, CloudFormation, ARM, Dockerfile,
   Azure Pipelines, GitHub Actions, Jenkinsfile, GitLab CI, etc.), and get
-  back the issues found plus an improved version. A zip is unzipped entirely
-  in the browser (JSZip) and each file is auto-sorted into the IaC field or
-  the pipeline field by filename/content; `.tfstate`, `.pem`/`.key`, `.env`,
-  and similar secret/state files are filtered out automatically, and
-  build/vendor directories (`node_modules`, `.git`, `dist`, etc.) are
-  skipped. Review the populated fields before generating — nothing is sent
-  to the backend until you click Generate.
+  back the issues found plus an improved version *restructured into that
+  same best-practice folder layout*, even if the original was one flat file.
+  A zip is unzipped entirely in the browser (JSZip) and each file is
+  auto-sorted into the IaC field or the pipeline field by filename/content;
+  `.tfstate`, `.pem`/`.key`, `.env`, and similar secret/state files are
+  filtered out automatically, and build/vendor directories (`node_modules`,
+  `.git`, `dist`, etc.) are skipped. Review the populated fields before
+  generating — nothing is sent to the backend until you click Generate.
 - **Full solution bundle** — describe an end-to-end need (e.g. "onboard a new
   client across dev/qa/staging/prod") and get back a *complete* file set:
   environment-separated IaC, a full multi-stage pipeline with security gates,
